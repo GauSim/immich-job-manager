@@ -11,6 +11,11 @@ import { isGroupJobType } from '../core/job-type.js';
 import { JobTypeRegistry } from '../core/job-type.registry.js';
 import { RunStore, type RunTotals } from '../runner/run-store.js';
 import { AlbumSyncService } from './album-sync.service.js';
+import {
+  GroupApplyService,
+  type GroupApplyPreview,
+  type GroupApplyResult,
+} from './group-apply.service.js';
 import { JobLocks } from './job-locks.js';
 
 export interface ApplyPreview {
@@ -48,11 +53,13 @@ export class ApplyService {
     private readonly store: RunStore,
     private readonly locks: JobLocks,
     private readonly registry: JobTypeRegistry,
+    private readonly groupApply: GroupApplyService,
   ) {}
 
   /** Counts for the confirmation dialog. Read-only: does not create albums. */
-  async preview(runId: string): Promise<ApplyPreview> {
+  async preview(runId: string): Promise<ApplyPreview | GroupApplyPreview> {
     const { run, job } = await this.load(runId);
+    if (this.isGroupJob(job)) return this.groupApply.preview(run);
     const targets = await this.sync.resolve(job, { create: false });
     const counts = { selected: 0, alreadyInAlbum: 0, excluded: 0, toAdd: 0 };
     for (const id of this.store.selectedCandidateIds(run.id)) {
@@ -69,7 +76,7 @@ export class ApplyService {
     };
   }
 
-  async apply(runId: string): Promise<ApplyResult> {
+  async apply(runId: string): Promise<ApplyResult | GroupApplyResult> {
     const { run, job } = await this.load(runId);
     if (!this.locks.tryLock(job.id))
       throw new ConflictException('This job is already being applied');
@@ -84,6 +91,7 @@ export class ApplyService {
           'The job has a queued or running run; wait for it to finish',
         );
       }
+      if (this.isGroupJob(job)) return await this.groupApply.apply(run, job);
       const selected = this.store.selectedCandidateIds(run.id);
       const targets = await this.sync.resolve(job, { create: true });
       const result = await this.sync.add(targets, selected);
@@ -121,13 +129,13 @@ export class ApplyService {
     const job = await this.jobs.findOneBy({ id: run.jobId });
     if (!job)
       throw new NotFoundException('The job of this run no longer exists');
-    if (
+    return { run, job };
+  }
+
+  private isGroupJob(job: JobEntity): boolean {
+    return (
       this.registry.has(job.typeId) &&
       isGroupJobType(this.registry.get(job.typeId))
-    )
-      throw new ConflictException(
-        'Applying dry runs of group jobs (e.g. trip albums) is not available yet',
-      );
-    return { run, job };
+    );
   }
 }

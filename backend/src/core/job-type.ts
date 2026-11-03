@@ -96,6 +96,8 @@ export interface GroupJobType<P = unknown> {
   indexFilter(params: P, ownerId: string): IndexReadFilter;
   /** All groups of the library, ordered by `coreStart`. */
   group(ctx: GroupContext<P>): Promise<ProposedGroup[]> | ProposedGroup[];
+  /** Reuse existing albums that already cover a new group (SDD §7.4); null/absent = never. */
+  adoption?(params: P): { minShare: number; minCoverage: number } | null;
   /** Optional insight for the job page (e.g. inferred home per period). */
   insights?(ctx: Omit<GroupContext<P>, 'log' | 'signal'>): unknown;
 }

@@ -6,7 +6,6 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
-import type { IndexedAsset } from '../src/asset-index/asset-index.mapping.js';
 import { AppModule } from '../src/app.module.js';
 import { loadConfig } from '../src/config/config.schema.js';
 import { SqliteService, sqliteNow } from '../src/persistence/sqlite.service.js';
@@ -16,32 +15,7 @@ import {
   FakeImmichServer,
 } from './support/fake-immich-server.js';
 import { PLACES, Timeline } from './support/timeline.js';
-
-/** Index row (from the timeline builder) → `/search/metadata` item. */
-function toImmich(a: IndexedAsset): Record<string, unknown> & { id: string } {
-  return {
-    id: a.id,
-    ownerId: a.ownerId,
-    type: a.type,
-    visibility: a.visibility,
-    isTrashed: false,
-    originalFileName: a.fileName,
-    fileCreatedAt: new Date(a.takenAt).toISOString(),
-    localDateTime: `${a.localDateTime}Z`,
-    updatedAt: FakeImmichLibrary.OLD_DATE,
-    exifInfo: {
-      latitude: a.latitude,
-      longitude: a.longitude,
-      city: a.city,
-      state: a.state,
-      country: a.country,
-      timeZone: a.timeZone,
-      make: a.hasCamera ? 'Apple' : null,
-      model: a.hasCamera ? 'iPhone 16' : null,
-      description: a.isScreenshot ? 'Screenshot' : '',
-    },
-  };
-}
+import { toImmich } from './support/trip-library.js';
 
 /** Home in Berlin with one trip to Bangkok (2026-03-04 … 03-18) and a camera photo without GPS. */
 function library() {
@@ -129,8 +103,7 @@ describe('Trip albums dry run & review (e2e)', () => {
     };
   };
 
-  const albumWrites = () =>
-    immich.requestsMatching('POST', /^\/albums$/).length + lib.writeCalls();
+  const albumWrites = () => lib.allAlbumWrites();
 
   it('lists the trip job type as a group job with its params schema', async () => {
     const res = await http.get('/api/job-types').expect(200);
@@ -248,21 +221,6 @@ describe('Trip albums dry run & review (e2e)', () => {
           (r.body as { summary: { selected: number } }).summary.selected,
         ).toBe(1),
       );
-  });
-
-  it('refuses real runs and apply until album sync exists', async () => {
-    const job = await createJob();
-    await http
-      .patch(`/api/jobs/${job.id}`)
-      .send({ syncMode: 'additive' })
-      .expect(200);
-    await http
-      .post(`/api/jobs/${job.id}/runs`)
-      .send({ dryRun: false })
-      .expect(400);
-    const run = await dryRun(job.id);
-    await http.post(`/api/runs/${run.id}/apply`).expect(409);
-    expect(albumWrites()).toBe(0);
   });
 
   it('matches a stored trip (update) and respects ignored trips', async () => {

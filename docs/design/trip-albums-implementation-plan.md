@@ -188,24 +188,37 @@ Tasks:
 
 **Goal:** trips become Immich albums and stay correct across reruns and manual edits (SDD §7.3–7.5).
 
-**Status:** not started
+**Status:** implemented (2026-11-03) – verified end to end against a fake Immich; pending: apply and rerun on the real library, contract tests against a real Immich
+
+- Note: started while the T3 PR was still in review (the user asked to continue).
 
 Tasks:
 
-- [ ] `GroupAlbumSync` in `src/sync/` (all album writes stay in the sync module):
-  - [ ] Create album with description; unique name (` (2)`).
-  - [ ] Read back members and name; detect removed-by-hand (→ `excluded`), added-by-hand (→ `present`), renamed (→ `name_locked`).
-  - [ ] Add `matches − members − excluded − job exclusion album`; record `owned`.
-  - [ ] Mirror: remove `owned − matches` (never for adopted albums).
-  - [ ] Rename when the generated name changed and is not locked.
-  - [ ] Forget index rows on `no_permission` / `not_found`.
-- [ ] `ImmichClient`: `renameAlbum`, album metadata read (`updatedAt`, name) if not present.
-- [ ] Adoption (§7.4): candidate albums not managed by any job, member times from the index, thresholds, cache by album `updatedAt`.
-- [ ] Apply of a dry run: selected trips only; unticked trips → `ignored`; adopt ↔ new switch honoured.
-- [ ] Guardrail `maxNewAlbumsWithoutReview` on the first real run.
-- [ ] Merged / orphaned trips: no album writes, flagged.
+- [x] `GroupAlbumSync` in `src/sync/` (all album writes stay in the sync module):
+  - Note: `src/sync/group-album-sync.ts`. Every active group's album is read back on every real run (one member search per trip) instead of only "touched" trips. That is simpler and still makes zero writes without changes.
+  - [x] Create album with description; unique name (` (2)`).
+    - Note: description `Managed by Immich Album Jobs – <job name>`, which adoption also uses to skip the app's own albums.
+  - [x] Read back members and name; detect removed-by-hand (→ `excluded`), added-by-hand (→ `present`), renamed (→ `name_locked`).
+    - Note: an album **deleted** in Immich turns its trip `ignored` (not recreated; set it `active` to get it back).
+  - [x] Add `matches − members − excluded − job exclusion album`; record `owned`.
+  - [x] Mirror: remove `owned − matches` (never for adopted albums).
+  - [x] Rename when the generated name changed and is not locked.
+  - [x] Forget index rows on `no_permission` / `not_found`.
+    - Note: on any per-id failure of add/remove.
+- [x] `ImmichClient`: `renameAlbum`, album metadata read (`updatedAt`, name) if not present.
+  - Note: `listOwnedAlbums()` (name, description, start/end dates), `createAlbum()` (always new), `renameAlbum()` (needs `album.update`).
+- [x] Adoption (§7.4): candidate albums not managed by any job, member times from the index, thresholds, cache by album `updatedAt`.
+  - Note: `src/groups/adoption.ts`. Pre-filter: the album's start/end lie within the trip (± 1 day). Then ≥ `adoptMinShare` of its assets inside the trip and ≥ 30 % of the trip's assets in it; each album adopted at most once. Member lists are cached per run only (no persistent cache; the date pre-filter keeps reads low). Dry runs store the proposal in `run_group.album_id` + `summary.adoptAlbumName`. Adopted albums are name-locked and never shrink.
+- [x] Apply of a dry run: selected trips only; unticked trips → `ignored`; adopt ↔ new switch honoured.
+  - Note: `GroupApplyService` (additive, like asset apply). `PATCH /runs/:id/groups` takes `adopt: true|false` per key. A dry run can be applied **once**, and only if no later sync changed the job's trips (409 otherwise), because a second apply would duplicate albums. The preview returns counts (create / adopt / update / ignore / assets).
+- [x] Guardrail `maxNewAlbumsWithoutReview` on the first real run.
+  - Note: constant `MAX_NEW_GROUPS_WITHOUT_REVIEW = 30` (not a param). It is checked before any write; the exclusion album is created only after it.
+- [x] Merged / orphaned trips: no album writes, flagged.
+- Note: real runs of group jobs are no longer refused. Additive / mirror follow the job's sync mode, and the exclusion album is created like for asset jobs.
+- Note: fixed a v1 bug found on the way. With Zod 4, `UpdateJobDto` (`CreateJobDto.partial()`) still applied defaults, so any `PATCH /jobs/:id` reset `syncMode` to `dry-run` and `enabled` to `false`. The update DTO is now built without defaults (regression test in `jobs.e2e-spec.ts`).
 
-- [ ] **Tests:** unit tests for edit detection and diffs; contract tests against a throwaway Immich: create, idempotent rerun (0 writes), rename kept, removed asset stays out, added asset kept, adoption, mirror removal of owned only, dry run never writes.
+- [x] **Tests:** unit tests for edit detection and diffs; contract tests against a throwaway Immich: create, idempotent rerun (0 writes), rename kept, removed asset stays out, added asset kept, adoption, mirror removal of owned only, dry run never writes.
+  - Note: covered by `test/trip-sync.e2e-spec.ts` (10 tests) against the stateful fake Immich (extended with album descriptions, start/end dates and rename), plus `adoption.spec.ts`. **Not run against a real Immich:** no throwaway instance can be started in the dev sandbox (GHCR blocked); contract tests are still to write and run.
 
 - [ ] **Done when:** applying a dry run on the real library creates the expected albums, a rerun makes zero writes, and manual edits in Immich survive the next run.
 

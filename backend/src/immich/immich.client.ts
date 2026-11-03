@@ -7,6 +7,7 @@ import {
   createAlbum,
   getAllAlbums,
   getMyUser,
+  updateAlbumInfo,
   getServerVersion,
   isHttpError,
   removeAssetFromAlbum,
@@ -113,6 +114,18 @@ export interface AlbumRef {
   id: string;
   name: string;
   created: boolean;
+}
+
+/** An album of the API key's user, as `GET /albums` lists it. */
+export interface AlbumSummary {
+  id: string;
+  name: string;
+  description: string;
+  assetCount: number;
+  /** Local time of the earliest / latest asset (Immich serialises it as UTC); absent for empty albums. */
+  startDate?: string;
+  endDate?: string;
+  lastModifiedAssetTimestamp?: string;
 }
 
 export interface AlbumWriteResult {
@@ -318,6 +331,60 @@ export class ImmichClient {
     );
     this.logger.log(`Created album "${name}" (${created.id})`);
     return { id: created.id, name, created: true };
+  }
+
+  /** All albums owned by the API key's user, with dates for non-empty ones (API notes §10.5). */
+  async listOwnedAlbums(options: CallOptions = {}): Promise<AlbumSummary[]> {
+    const albums = await this.call(
+      'getAllAlbums',
+      (o) => getAllAlbums({ isOwned: true }, o),
+      options,
+    );
+    return albums.map((a) => ({
+      id: a.id,
+      name: a.albumName,
+      description: a.description ?? '',
+      assetCount: a.assetCount,
+      startDate: a.startDate,
+      endDate: a.endDate,
+      lastModifiedAssetTimestamp: a.lastModifiedAssetTimestamp,
+    }));
+  }
+
+  /** `POST /albums`: a new album, even if one with that name exists. */
+  async createAlbum(
+    name: string,
+    options: CallOptions & { description?: string } = {},
+  ): Promise<{ id: string; name: string }> {
+    const created = await this.call(
+      'createAlbum',
+      (o) =>
+        createAlbum(
+          {
+            createAlbumDto: {
+              albumName: name,
+              description: options.description,
+            },
+          },
+          o,
+        ),
+      options,
+    );
+    this.logger.log(`Created album "${name}" (${created.id})`);
+    return { id: created.id, name };
+  }
+
+  /** `PATCH /albums/{id}` (needs `album.update`). */
+  async renameAlbum(
+    id: string,
+    name: string,
+    options: CallOptions = {},
+  ): Promise<void> {
+    await this.call(
+      'updateAlbumInfo',
+      (o) => updateAlbumInfo({ id, updateAlbumDto: { albumName: name } }, o),
+      options,
+    );
   }
 
   /** All asset ids in an album (v3 album responses no longer include assets). */

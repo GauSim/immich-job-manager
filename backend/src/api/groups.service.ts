@@ -63,7 +63,12 @@ export class GroupsService {
       throw new ConflictException('Only dry runs have groups to review');
     if (run.status === 'queued' || run.status === 'running')
       throw new ConflictException('The dry run has not finished yet');
-    const updated = this.groups.selectRunGroups(runId, dto.selected, dto.keys);
+    let updated = 0;
+    if (dto.selected !== undefined)
+      updated += this.groups.selectRunGroups(runId, dto.selected, dto.keys);
+    if (dto.adopt !== undefined)
+      for (const key of dto.keys ?? [])
+        if (this.groups.setAdoption(runId, key, dto.adopt)) updated++;
     return { ...(await this.runGroups(runId)), updated };
   }
 
