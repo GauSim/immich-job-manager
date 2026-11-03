@@ -40,12 +40,13 @@ Run in the package directory:
 | install | `npm ci` | `npm ci` |
 | lint | `npm run lint` | `npm run lint` |
 | format | `npm run format` / `format:check` | `npm run format` / `format:check` |
+| typecheck | `npm run typecheck` (incl. tests) | (part of build) |
 | test | `npm test`, `npm run test:e2e` | `npm test` |
 | build | `npm run build` | `npm run build` |
 
 Migrations: see `backend/README.md` (generate after every entity change; register in `migrations/index.ts`).
 
-Before committing, run lint, format check, tests and build for every package you touched. CI (`.github/workflows/ci.yml`) runs the same plus a Docker build and `/api/health` smoke test.
+Before committing, run lint, format check, typecheck, tests and build for every package you touched. CI (`.github/workflows/ci.yml`) runs the same plus a Docker build and `/api/health` smoke test.
 
 ## Conventions
 

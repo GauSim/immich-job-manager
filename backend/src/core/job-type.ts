@@ -30,6 +30,8 @@ export interface Candidate {
   score: number;
   /** Signals that contributed, e.g. `['ios-tag', 'png']`. */
   reasons: string[];
+  /** Original file name, shown in the review grid. */
+  fileName?: string;
 }
 
 export interface CandidateBatch {

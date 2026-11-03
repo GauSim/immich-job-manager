@@ -22,7 +22,8 @@
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
     "typeorm": "typeorm -d dist/persistence/data-source.cli.js",
     "migration:generate": "npm run build && typeorm migration:generate -d dist/persistence/data-source.cli.js -p",
-    "migration:run": "npm run build && typeorm migration:run -d dist/persistence/data-source.cli.js"
+    "migration:run": "npm run build && typeorm migration:run -d dist/persistence/data-source.cli.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@immich/sdk": "^3.3.5",

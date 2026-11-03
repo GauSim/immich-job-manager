@@ -200,7 +200,10 @@ describe('ImmichClient', () => {
     it('lists album members across pages', async () => {
       server.on('POST /search/metadata', (req) => {
         const body = req.body as { cursor?: string; filter: unknown };
-        expect(body.filter).toEqual({ albumIds: { any: ['album-1'] } });
+        expect(body.filter).toEqual({
+          albumIds: { any: ['album-1'] },
+          visibility: { in: ['timeline', 'archive', 'hidden'] },
+        });
         return body.cursor
           ? { json: searchResponse([fakeAsset('c')]) }
           : { json: searchResponse([fakeAsset('a'), fakeAsset('b')], 'p2') };

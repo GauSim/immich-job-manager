@@ -2,7 +2,7 @@
 
 Self-hosted companion app for [Immich](https://immich.app) v3: rerunnable, schedulable batch jobs that select assets (first job: screenshots) and keep them in an Immich album. Talks to Immich only through its REST API with a scoped API key.
 
-> Status: **phase 2** – job framework and runner (REST API, runs with cancel/resume, live progress). Only a test job type so far; no UI yet.
+> Status: **phase 3** – screenshot job with dry runs and a review API. No UI and no album writes yet.
 
 ## Docs
 
@@ -80,12 +80,16 @@ All under `/api`. Validation errors: `400 { message: "Validation failed", errors
 | POST | `/runs/:id/cancel`, `/runs/:id/resume` | Cancel; resume an interrupted or failed run from its cursor |
 | GET | `/runs/:id/logs` | Run log (`?after=<id>`) |
 | GET | `/runs/:id/events` | Server-sent events: `status`, `progress` (≤ 1/s), `log` |
+| GET | `/runs/:id/candidates` | Dry run: candidates (`?sort=-score\|score\|name&minScore=&maxScore=&selected=&limit=&offset=`) with summary counts |
+| PATCH | `/runs/:id/candidates` | Dry run: tick/untick `{ selected, assetIds }` or `{ selected, filter }` |
+| GET | `/assets/:id/thumbnail` | Thumbnail proxy (only assets seen in a run) |
 
 ```bash
 curl -X POST localhost:3000/api/jobs -H 'content-type: application/json' \
-  -d '{"name":"Test","typeId":"noop-test","targetAlbumName":"Test"}'
+  -d '{"name":"Screenshots","typeId":"screenshot-detector","targetAlbumName":"Screenshots"}'
 curl -X POST localhost:3000/api/jobs/<id>/runs -H 'content-type: application/json' -d '{}'
 curl -N localhost:3000/api/runs/<run-id>/events
+curl 'localhost:3000/api/runs/<run-id>/candidates?limit=20'
 ```
 
 ## Health

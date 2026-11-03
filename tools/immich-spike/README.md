@@ -38,3 +38,11 @@ IMMICH_URL=http://localhost:2283/api IMMICH_API_KEY=$(cat out/api-key) npm run s
 ```
 
 Start the instance with Immich's official `docker-compose.yml` and `example.env` from the latest release (the machine-learning service is optional; without it `/search/smart` returns 500).
+
+## Anonymised metadata fixture
+
+`anonymise-metadata.py` turns a spike report into the scorer fixture used by the backend tests (file-name patterns, MIME, dimensions, camera EXIF and description only — no dates, GPS or places):
+
+```bash
+python3 anonymise-metadata.py ../../docs/spike-out/spike-report.json ../../backend/test/fixtures/real-library-sample.json
+```

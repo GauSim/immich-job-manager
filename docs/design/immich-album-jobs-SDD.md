@@ -240,6 +240,7 @@ Scope: **images only**. Videos (including screen recordings) are always skipped.
 
 | Signal | Rule | Score |
 | --- | --- | --- |
+| iOS description tag | Immich `exifInfo.description = "Screenshot"` (from the metadata; verified on the real library, see API notes §4.2) | sets score to 1.0 |
 | iOS screenshot tag | EXIF `UserComment = "Screenshot"` in the original file | sets score to 1.0 |
 | Filename | `originalFileName` matches `Screenshot`, `Screen Shot`, `Bildschirmfoto`, `Capture d’écran`, `Schermafbeelding`, `Screenshot_` | +0.6 |
 | Format | MIME `image/png` | +0.25 |
@@ -251,7 +252,11 @@ Scores are summed and capped at 1.0. Default threshold: 0.6. Every candidate kee
 
 ### 6.2 iOS screenshot tag
 
-iOS and macOS write EXIF `UserComment = "Screenshot"` into every screenshot; Apple Photos uses this tag for its Screenshots album. Immich does not store `UserComment` (its description comes only from `ImageDescription` and `Description`), so the job reads the tag from the original file:
+iOS and macOS write EXIF `UserComment = "Screenshot"` into every screenshot; Apple Photos uses this tag for its Screenshots album. Immich does not store `UserComment` (its description comes only from `ImageDescription` and `Description`), so the job reads the tag from the original file.
+
+> Update (phase 3): on the real library Immich's `description` of iPhone screenshots *is* `"Screenshot"`, so most screenshots are already decisive from metadata (iOS description tag above). The file read below remains the fallback for untagged borderline assets.
+
+
 
 - **Only when needed:** for PNGs or assets without camera EXIF that don't already pass the threshold on metadata alone.
 - **Partial read:** request only the first 64 KB with an HTTP `Range` header (to verify that Immich honours it on originals). Fallback: stream the file and abort as soon as the tag is parsed (`exifr` in Node).

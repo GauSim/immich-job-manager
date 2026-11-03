@@ -51,6 +51,7 @@ export class RunStore {
               c.assetId,
               c.score,
               JSON.stringify(c.reasons),
+              c.fileName ?? null,
             );
           }
         }
@@ -81,8 +82,10 @@ export class RunStore {
     this.statements = {
       // A page may be re-processed after a resume (cursor is at-least-once): upsert.
       upsertCandidate: db.prepare(
-        `INSERT INTO run_candidate (run_id, asset_id, score, reasons, selected) VALUES (?, ?, ?, ?, 1)
-         ON CONFLICT (run_id, asset_id) DO UPDATE SET score = excluded.score, reasons = excluded.reasons`,
+        `INSERT INTO run_candidate (run_id, asset_id, score, reasons, original_file_name, selected)
+         VALUES (?, ?, ?, ?, ?, 1)
+         ON CONFLICT (run_id, asset_id) DO UPDATE SET
+           score = excluded.score, reasons = excluded.reasons, original_file_name = excluded.original_file_name`,
       ),
       updateTotals: db.prepare(
         `UPDATE job_run SET scanned = scanned + ?, matched = matched + ?, files_read = files_read + ?,

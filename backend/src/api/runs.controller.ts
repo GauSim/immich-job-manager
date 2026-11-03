@@ -1,9 +1,11 @@
 import {
+  Body,
   Controller,
   Get,
   HttpCode,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   Req,
@@ -20,7 +22,12 @@ import type {
   RunLogEntity,
 } from '../persistence/entities/index.js';
 import { totalsOf } from '../runner/run-executor.js';
-import { LogQuery } from './dto.js';
+import {
+  CandidatesService,
+  type CandidateSummary,
+  type CandidateView,
+} from './candidates.service.js';
+import { CandidateQuery, LogQuery, UpdateCandidatesDto } from './dto.js';
 import { RunsService } from './runs.service.js';
 import { ZodPipe } from './validation.js';
 
@@ -32,7 +39,30 @@ export class RunsController {
   constructor(
     private readonly runs: RunsService,
     private readonly events: RunEventsService,
+    private readonly candidates: CandidatesService,
   ) {}
+
+  /** Dry run: paged candidates (`?sort=-score|score|name&minScore=&maxScore=&selected=`). */
+  @Get(':id/candidates')
+  listCandidates(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query(new ZodPipe(CandidateQuery)) query: CandidateQuery,
+  ): Promise<{
+    items: CandidateView[];
+    total: number;
+    summary: CandidateSummary;
+  }> {
+    return this.candidates.list(id, query);
+  }
+
+  /** Dry run: tick/untick by `assetIds` or by `filter`. */
+  @Patch(':id/candidates')
+  updateCandidates(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(UpdateCandidatesDto)) dto: UpdateCandidatesDto,
+  ): Promise<{ updated: number; summary: CandidateSummary }> {
+    return this.candidates.update(id, dto);
+  }
 
   @Get(':id')
   get(@Param('id', ParseUUIDPipe) id: string): Promise<JobRunEntity> {
