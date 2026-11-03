@@ -26,6 +26,8 @@ import {
 import { PersistenceModule } from '../../src/persistence/persistence.module.js';
 import { SqliteService } from '../../src/persistence/sqlite.service.js';
 import { RunnerModule } from '../../src/runner/runner.module.js';
+import { SyncModule } from '../../src/sync/sync.module.js';
+import { MemoryImmich } from './memory-immich.js';
 
 /**
  * Fake source for runner tests: `total` assets in pages of `pageSize`; every
@@ -96,18 +98,15 @@ export class FakeSourceJob implements JobType<FakeParams> {
   }
 }
 
-export const fakeImmich = {
-  assertCompatible: async () => ({
-    major: 3,
-    minor: 3,
-    patch: 5,
-    version: 'v3.3.5',
-  }),
-} as unknown as ImmichClient;
+/** Shared in-memory Immich for runner tests (albums only; sources are fake job types). */
+export const fakeImmich = new MemoryImmich();
 
 @Global()
 @Module({
-  providers: [{ provide: ImmichClient, useValue: fakeImmich }, FakeSourceJob],
+  providers: [
+    { provide: ImmichClient, useValue: fakeImmich.asClient() },
+    FakeSourceJob,
+  ],
   exports: [ImmichClient],
 })
 class TestDoublesModule {}
@@ -147,6 +146,7 @@ export async function createRunnerHarness(
       EventsModule,
       JobTypesModule,
       TestDoublesModule,
+      SyncModule,
       RunnerModule,
     ],
     providers: options.providers ?? [],

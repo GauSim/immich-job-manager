@@ -181,7 +181,7 @@ export class JobEditor {
           title: 'Switch to mirror mode?',
           message:
             'In mirror mode, assets this app added to the album are removed again when they no longer match.\n' +
-            'Assets you added by hand are never removed. (Album sync arrives in phase 5.)',
+            'Assets you added by hand are never removed.',
           confirm: 'Use mirror mode',
           destructive: true,
         })

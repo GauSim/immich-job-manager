@@ -7,6 +7,7 @@ import {
   ElementRef,
   inject,
   input,
+  output,
   signal,
   untracked,
 } from '@angular/core';
@@ -18,9 +19,12 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { EMPTY, expand, reduce, type Subscription } from 'rxjs';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { EMPTY, expand, finalize, of, reduce, switchMap, type Subscription } from 'rxjs';
 import { Api } from '../../core/api';
 import type {
+  ApplyPreview,
+  ApplyResult,
   Candidate,
   CandidateFilter,
   CandidateSort,
@@ -81,6 +85,10 @@ export class ReviewGrid {
 
   readonly runId = input.required<string>();
   readonly albumName = input<string>('');
+  /** Emitted after the selection was applied to the album. */
+  readonly applied = output<ApplyResult>();
+  protected readonly applying = signal(false);
+  private readonly snackBar = inject(MatSnackBar);
 
   protected readonly items = signal<Candidate[]>([]);
   protected readonly total = signal(0);
@@ -171,15 +179,24 @@ export class ReviewGrid {
       });
   }
 
+  /** Preview counts → confirmation → add the selected candidates to the album. */
   apply(): void {
-    const s = this.summary();
-    confirm(this.dialog, {
-      title: 'Apply to album',
-      message:
-        `${s?.selected ?? 0} selected candidates would be added to "${this.albumName() || 'the target album'}".\n` +
-        'Writing to Immich albums arrives in phase 5.',
-      infoOnly: true,
-    }).subscribe();
+    this.applying.set(true);
+    this.api
+      .applyPreview(this.runId())
+      .pipe(
+        switchMap((p) =>
+          confirm(this.dialog, applyConfirmation(p)).pipe(
+            switchMap((ok) => (ok && p.toAdd > 0 ? this.api.apply(this.runId()) : of(null))),
+          ),
+        ),
+        finalize(() => this.applying.set(false)),
+      )
+      .subscribe((result) => {
+        if (!result) return;
+        this.snackBar.open(applyMessage(result), undefined, { duration: 5000 });
+        this.applied.emit(result);
+      });
   }
 
   thumbnail(c: Candidate): string {
@@ -192,4 +209,25 @@ export class ReviewGrid {
     const set = new Set(ids);
     this.items.update((list) => list.map((c) => (set.has(c.assetId) ? { ...c, selected } : c)));
   }
+}
+
+const n = (v: number) => v.toLocaleString();
+
+export function applyConfirmation(p: ApplyPreview) {
+  const lines = [
+    p.toAdd > 0
+      ? `${n(p.toAdd)} asset${p.toAdd === 1 ? '' : 's'} will be added to "${p.albumName}"${p.albumExists ? '' : ' (new album)'}.`
+      : `Nothing to add: all selected assets are already in "${p.albumName}" or excluded.`,
+  ];
+  if (p.alreadyInAlbum) lines.push(`${n(p.alreadyInAlbum)} already in the album.`);
+  if (p.excluded) lines.push(`${n(p.excluded)} skipped (in "${p.exclusionAlbumName}").`);
+  lines.push('Nothing is removed.');
+  return p.toAdd > 0
+    ? { title: 'Apply to album?', message: lines.join('\n'), confirm: `Add ${n(p.toAdd)}` }
+    : { title: 'Apply to album', message: lines.join('\n'), infoOnly: true };
+}
+
+export function applyMessage(r: ApplyResult): string {
+  const failed = r.failed ? ` (${n(r.failed)} refused by Immich)` : '';
+  return `Added ${n(r.added)} asset${r.added === 1 ? '' : 's'} to "${r.albumName}"${failed}`;
 }

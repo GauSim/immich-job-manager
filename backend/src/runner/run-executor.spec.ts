@@ -1,6 +1,7 @@
 import { rmSync } from 'node:fs';
 import {
   createRunnerHarness,
+  fakeImmich,
   type RunnerHarness,
 } from '../../test/support/runner-harness.js';
 import {
@@ -15,6 +16,8 @@ describe('RunExecutor (with RunQueue, real SQLite)', () => {
   let queue: RunQueue;
 
   beforeEach(async () => {
+    fakeImmich.albums.clear();
+    fakeImmich.calls = { create: 0, add: 0, remove: 0 };
     h = await createRunnerHarness();
     queue = h.module.get(RunQueue);
   });
@@ -74,15 +77,148 @@ describe('RunExecutor (with RunQueue, real SQLite)', () => {
     expect(messages.at(-1)).toMatch(/^Finished: 10 scanned, 5 matched/);
   });
 
-  it('stores no candidates for real runs (album sync comes in phase 5)', async () => {
-    const jobId = await createJob();
-    const runId = await startRun(jobId, false);
-    await queue.idle();
-    expect(await run(runId)).toMatchObject({ status: 'succeeded', matched: 5 });
-    expect(await h.candidates.countBy({ runId })).toBe(0);
-    expect((await h.logs.findBy({ runId, level: 'warn' }))[0].message).toMatch(
-      /phase 5/,
-    );
+  describe('album sync (real runs)', () => {
+    const owned = async (jobId: string) =>
+      h.sqlite.db
+        .prepare(
+          'SELECT asset_id FROM job_asset WHERE job_id = ? ORDER BY asset_id',
+        )
+        .all(jobId)
+        .map((r) => (r as { asset_id: string }).asset_id);
+    const members = (name: string) =>
+      [...(fakeImmich.album(name)?.members ?? [])].sort();
+
+    it('adds matches to the album (creating both albums) and records ownership', async () => {
+      const jobId = await createJob();
+      const runId = await startRun(jobId, false);
+      await queue.idle();
+      expect(await run(runId)).toMatchObject({
+        status: 'succeeded',
+        matched: 5,
+        added: 5,
+        removed: 0,
+      });
+      expect(members('Test')).toEqual([
+        'asset-0',
+        'asset-2',
+        'asset-4',
+        'asset-6',
+        'asset-8',
+      ]);
+      expect(fakeImmich.album('Test – excluded')).toBeDefined();
+      expect(await owned(jobId)).toEqual(members('Test'));
+      expect(await h.candidates.countBy({ runId })).toBe(0); // real runs store totals only
+      expect(
+        (await h.jobs.findOneByOrFail({ id: jobId })).targetAlbumId,
+      ).toBeTruthy();
+      const last = (
+        await h.logs.find({ where: { runId }, order: { id: 'DESC' } })
+      )[0].message;
+      expect(last).toMatch(
+        /^Finished: 10 scanned, 5 matched, 5 added, 0 removed, 0 already in album/,
+      );
+    });
+
+    it('makes zero album writes on a rerun without changes', async () => {
+      const jobId = await createJob();
+      await startRun(jobId, false);
+      await queue.idle();
+      fakeImmich.calls = { create: 0, add: 0, remove: 0 };
+      const second = await startRun(jobId, false);
+      await queue.idle();
+      expect(fakeImmich.calls).toEqual({ create: 0, add: 0, remove: 0 });
+      expect(await run(second)).toMatchObject({
+        status: 'succeeded',
+        matched: 5,
+        added: 0,
+      });
+    });
+
+    it('keeps assets of the exclusion album out (real and dry runs)', async () => {
+      fakeImmich.createAlbum('Test – excluded', ['asset-2']);
+      const jobId = await createJob();
+      const real = await startRun(jobId, false);
+      await queue.idle();
+      expect(members('Test')).not.toContain('asset-2');
+      expect(await run(real)).toMatchObject({ matched: 4, added: 4 });
+      const dry = await startRun(jobId, true);
+      await queue.idle();
+      expect(
+        (await h.candidates.findBy({ runId: dry })).map((c) => c.assetId),
+      ).not.toContain('asset-2');
+    });
+
+    it('mirror mode removes owned non-matches but never assets added by hand', async () => {
+      const jobId = await createJob({ total: 10, matchEvery: 2 });
+      await h.jobs.update(jobId, { syncMode: 'mirror' });
+      await startRun(jobId, false);
+      await queue.idle();
+      fakeImmich.album('Test')!.members.add('manual-1'); // added by the user in Immich
+
+      await h.jobs.update(jobId, {
+        params: { ...h.fake.defaultParams, matchEvery: 4 } as never,
+      }); // fewer matches
+      const second = await startRun(jobId, false);
+      await queue.idle();
+      expect(await run(second)).toMatchObject({
+        status: 'succeeded',
+        matched: 3,
+        added: 0,
+        removed: 2,
+      });
+      expect(members('Test')).toEqual([
+        'asset-0',
+        'asset-4',
+        'asset-8',
+        'manual-1',
+      ]);
+      expect(await owned(jobId)).toEqual(['asset-0', 'asset-4', 'asset-8']);
+    });
+
+    it('additive mode never removes', async () => {
+      const jobId = await createJob();
+      await startRun(jobId, false);
+      await queue.idle();
+      await h.jobs.update(jobId, {
+        params: { ...h.fake.defaultParams, matchEvery: 4 } as never,
+      });
+      const second = await startRun(jobId, false);
+      await queue.idle();
+      expect(await run(second)).toMatchObject({ removed: 0 });
+      expect(members('Test')).toHaveLength(5);
+      expect(fakeImmich.calls.remove).toBe(0);
+    });
+
+    it('mirror mode skips removals when a run was resumed', async () => {
+      const jobId = await createJob({ total: 10, pageSize: 3, failAtPage: 3 });
+      await h.jobs.update(jobId, { syncMode: 'mirror' });
+      const runId = await startRun(jobId, false);
+      await queue.idle();
+      expect(await run(runId)).toMatchObject({ status: 'failed', added: 3 }); // pages 1–2 written
+      await h.runs.update(runId, { status: 'queued' });
+      queue.enqueue(runId, jobId);
+      await queue.idle();
+      expect(await run(runId)).toMatchObject({
+        status: 'succeeded',
+        added: 5,
+        removed: 0,
+      });
+      expect(fakeImmich.calls.remove).toBe(0);
+      const messages = (await h.logs.findBy({ runId, level: 'warn' })).map(
+        (l) => l.message,
+      );
+      expect(messages).toContainEqual(
+        expect.stringMatching(/removals skipped because this run was resumed/),
+      );
+    });
+
+    it('dry runs never create albums', async () => {
+      const jobId = await createJob();
+      await startRun(jobId, true);
+      await queue.idle();
+      expect(fakeImmich.albums.size).toBe(0);
+      expect(fakeImmich.calls).toEqual({ create: 0, add: 0, remove: 0 });
+    });
   });
 
   it('persists a page before the next one is produced', async () => {

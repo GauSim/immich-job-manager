@@ -6,15 +6,17 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, type Repository } from 'typeorm';
 import { JobTypeRegistry } from '../core/job-type.registry.js';
+import {
+  defaultExclusionAlbumName,
+  exclusionAlbumName,
+} from '../sync/album-sync.service.js';
+
+export { defaultExclusionAlbumName };
 import { JobEntity, JobRunEntity } from '../persistence/entities/index.js';
 import type { CreateJobDto, UpdateJobDto } from './dto.js';
 import { ValidationFailedException, zodErrors } from './validation.js';
 
 export const ACTIVE_STATUSES = ['queued', 'running'] as const;
-
-export function defaultExclusionAlbumName(target: string): string {
-  return `${target} – excluded`;
-}
 
 export interface JobView extends JobEntity {
   /** Effective exclusion album name (default applied). */
@@ -55,6 +57,7 @@ export class JobsService {
       ]);
     }
     const params = this.parseParams(dto.typeId, dto.params);
+    assertDistinctAlbums(dto.targetAlbumName, dto.exclusionAlbumName ?? null);
     const { identifiers } = await this.jobs.insert({
       name: dto.name,
       typeId: dto.typeId,
@@ -71,6 +74,12 @@ export class JobsService {
 
   async update(id: string, dto: UpdateJobDto): Promise<JobView> {
     const job = await this.getEntity(id);
+    assertDistinctAlbums(
+      dto.targetAlbumName ?? job.targetAlbumName,
+      dto.exclusionAlbumName !== undefined
+        ? dto.exclusionAlbumName
+        : job.exclusionAlbumName,
+    );
     const patch: Partial<JobEntity> = {};
     if (dto.name !== undefined) patch.name = dto.name;
     if (
@@ -136,5 +145,21 @@ export class JobsService {
         defaultExclusionAlbumName(job.targetAlbumName),
       lastRun,
     }) as JobView;
+  }
+}
+
+/** The exclusion album must not be the target album (it would exclude everything). */
+function assertDistinctAlbums(target: string, exclusion: string | null): void {
+  const effective = exclusionAlbumName({
+    targetAlbumName: target,
+    exclusionAlbumName: exclusion,
+  });
+  if (effective.trim().toLowerCase() === target.trim().toLowerCase()) {
+    throw new ValidationFailedException([
+      {
+        path: ['exclusionAlbumName'],
+        message: 'must differ from the target album',
+      },
+    ]);
   }
 }

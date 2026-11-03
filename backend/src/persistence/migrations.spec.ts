@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DataSource } from 'typeorm';
 import { buildDataSourceOptions, databasePath } from './data-source.options.js';
+import { MIGRATIONS } from './migrations/index.js';
 import { JobAssetEntity, JobEntity, JobRunEntity } from './entities/index.js';
 
 describe('migrations', () => {
@@ -66,8 +67,8 @@ describe('migrations', () => {
   });
 
   it('upgrades an existing database without losing rows', async () => {
-    await ds.undoLastMigration({ transaction: 'each' });
-    await ds.undoLastMigration({ transaction: 'each' }); // back to the Init schema
+    for (let i = 1; i < MIGRATIONS.length; i++)
+      await ds.undoLastMigration({ transaction: 'each' }); // back to Init
     await ds.query(
       `INSERT INTO job (id, name, type_id, params) VALUES ('j1', 'old', 'noop-test', '{}')`,
     );

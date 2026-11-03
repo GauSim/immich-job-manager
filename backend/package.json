@@ -23,7 +23,8 @@
     "typeorm": "typeorm -d dist/persistence/data-source.cli.js",
     "migration:generate": "npm run build && typeorm migration:generate -d dist/persistence/data-source.cli.js -p",
     "migration:run": "npm run build && typeorm migration:run -d dist/persistence/data-source.cli.js",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:contract": "vitest run --config ./vitest.config.contract.ts"
   },
   "dependencies": {
     "@immich/sdk": "^3.3.5",

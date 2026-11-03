@@ -61,6 +61,10 @@ export class RunDetail {
     const r = this.run();
     return r?.startedAt ? parseServerDate(r.startedAt).toLocaleString() : '';
   });
+  protected readonly appliedAt = computed(() => {
+    const r = this.run();
+    return r?.appliedAt ? parseServerDate(r.appliedAt).toLocaleString() : '';
+  });
   private events?: Subscription;
   private ticker?: ReturnType<typeof setInterval>;
 
@@ -124,6 +128,12 @@ export class RunDetail {
       this.run.set(run);
       this.logs.set(logs);
     });
+  }
+
+  /** After "Apply to album": reload totals and log. */
+  onApplied(): void {
+    const r = this.run();
+    if (r) this.refresh(r.id);
   }
 
   cancel(): void {

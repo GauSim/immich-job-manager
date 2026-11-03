@@ -72,9 +72,18 @@ test('create a screenshot job, dry-run it and review thousands of candidates', a
   await page.getByTestId('candidate').first().getByRole('checkbox').click();
   await expect(page.getByRole('option', { name: /Unticked \(1\)/ })).toBeVisible();
 
-  // Apply is a placeholder until phase 5
+  // Apply the selection (2,909 of 2,910) to the album
   await page.getByTestId('apply').click();
-  await expect(page.getByRole('dialog')).toContainText('phase 5');
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('2,909 assets will be added to "Screenshots" (new album).');
+  await dialog.getByRole('button', { name: 'Add 2,909' }).click();
+  await expect(page.getByText('Added 2,909 assets to "Screenshots"')).toBeVisible();
+  await expect(page.getByTestId('added')).toHaveText('2909');
+  await expect(page.getByTestId('applied-at')).toBeVisible();
+
+  // Applying again has nothing to add
+  await page.getByTestId('apply').click();
+  await expect(page.getByRole('dialog')).toContainText('Nothing to add');
   await page.getByRole('button', { name: 'OK' }).click();
 
   // Dashboard shows the last run
@@ -82,6 +91,22 @@ test('create a screenshot job, dry-run it and review thousands of candidates', a
   await expect(page.locator('app-status-chip')).toContainText('Succeeded');
 
   expect(errors).toEqual([]);
+});
+
+test('an additive run adds the remaining match to the album', async ({ page }) => {
+  // Runs after the first test (serial, shared stack): "Screenshots" holds 2,909 of 2,910.
+  await page.goto('/jobs/new');
+  await page.getByTestId('job-name').fill('Screenshots nightly');
+  await page.getByTestId('target-album').fill('Screenshots');
+  await page.getByTestId('sync-mode').click();
+  await page.getByRole('option', { name: /^Additive/ }).click();
+  await page.getByTestId('save-job').click();
+  await expect(page).toHaveURL(/\/jobs\/[0-9a-f-]{36}$/);
+  await page.getByRole('button', { name: 'Run now' }).click();
+  await expect(page.getByTestId('run-status')).toContainText('Succeeded', { timeout: 30_000 });
+  await expect(page.getByTestId('matched')).toHaveText('2910');
+  await expect(page.getByTestId('added')).toHaveText('1');
+  await expect(page.getByTestId('removed')).toHaveText('0');
 });
 
 test('shows field errors from the server', async ({ page }) => {

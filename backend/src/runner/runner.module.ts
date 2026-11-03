@@ -18,6 +18,6 @@ import { RunStore } from './run-store.js';
     },
     RunLifecycle,
   ],
-  exports: [RunQueue],
+  exports: [RunQueue, RunStore],
 })
 export class RunnerModule {}

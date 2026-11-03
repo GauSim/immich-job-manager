@@ -9,18 +9,15 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThan, type Repository } from 'typeorm';
 import { RunEventsService } from '../events/run-events.service.js';
 import { JobRunEntity, RunLogEntity } from '../persistence/entities/index.js';
-import { SqliteService } from '../persistence/sqlite.service.js';
+import { SqliteService, sqliteNow } from '../persistence/sqlite.service.js';
 import { RunCancelledError } from '../runner/run-errors.js';
 import { totalsOf } from '../runner/run-executor.js';
 import { RunQueue } from '../runner/run-queue.js';
+import { JobLocks } from '../sync/job-locks.js';
 import type { LogQuery, PageQuery, StartRunDto } from './dto.js';
 import { JobsService } from './jobs.service.js';
 
 const ACTIVE_SQL = `status IN ('queued', 'running')`;
-
-/** TypeORM's SQLite datetime format (UTC, ms precision). */
-export const sqliteNow = () =>
-  new Date().toISOString().replace('T', ' ').replace('Z', '');
 
 @Injectable()
 export class RunsService {
@@ -33,6 +30,7 @@ export class RunsService {
     private readonly queue: RunQueue,
     private readonly events: RunEventsService,
     private readonly sqlite: SqliteService,
+    private readonly locks: JobLocks,
   ) {}
 
   async start(jobId: string, dto: StartRunDto): Promise<JobRunEntity> {
@@ -41,6 +39,11 @@ export class RunsService {
     if (!dryRun && job.syncMode === 'dry-run') {
       throw new BadRequestException(
         'The job is in dry-run mode; change its sync mode to run it for real',
+      );
+    }
+    if (this.locks.isLocked(jobId)) {
+      throw new ConflictException(
+        'A dry run of this job is being applied; try again in a moment',
       );
     }
     const id = randomUUID();

@@ -38,6 +38,28 @@ export interface Run {
   filesRead: number;
   cacheHits: number;
   error: string | null;
+  /** Dry runs: when the selection was last applied to the album. */
+  appliedAt: string | null;
+}
+
+export interface ApplyPreview {
+  albumName: string;
+  albumExists: boolean;
+  exclusionAlbumName: string;
+  selected: number;
+  alreadyInAlbum: number;
+  excluded: number;
+  toAdd: number;
+}
+
+export interface ApplyResult {
+  albumName: string;
+  albumCreated: boolean;
+  selected: number;
+  added: number;
+  alreadyInAlbum: number;
+  excluded: number;
+  failed: number;
 }
 
 export interface Job {

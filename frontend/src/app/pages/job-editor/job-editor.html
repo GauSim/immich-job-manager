@@ -83,7 +83,7 @@
           <div class="row">
             <mat-form-field>
               <mat-label>Sync mode</mat-label>
-              <mat-select formControlName="syncMode">
+              <mat-select formControlName="syncMode" data-testid="sync-mode">
                 <mat-option value="dry-run">Dry run only (never changes Immich)</mat-option>
                 <mat-option value="additive">Additive (add new matches)</mat-option>
                 <mat-option value="mirror">Mirror (add, and remove own non-matches)</mat-option>

@@ -39,7 +39,7 @@
   <button
     matButton="filled"
     (click)="apply()"
-    [disabled]="!summary()?.selected"
+    [disabled]="!summary()?.selected || applying()"
     data-testid="apply"
   >
     Apply to album<mat-icon iconPositionEnd>chevron_right</mat-icon>

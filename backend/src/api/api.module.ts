@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { RunnerModule } from '../runner/runner.module.js';
+import { ApplyService } from '../sync/apply.service.js';
 import { AssetsController } from './assets.controller.js';
 import { CandidatesService } from './candidates.service.js';
 import { JobsController, JobTypesController } from './jobs.controller.js';
@@ -15,6 +16,6 @@ import { RunsService } from './runs.service.js';
     RunsController,
     AssetsController,
   ],
-  providers: [JobsService, RunsService, CandidatesService],
+  providers: [JobsService, RunsService, CandidatesService, ApplyService],
 })
 export class ApiModule {}
