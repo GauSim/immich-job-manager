@@ -8,6 +8,7 @@
     "fixtures": "python3 make-fixtures.py fixtures",
     "seed": "tsx src/seed.ts",
     "spike": "tsx src/spike.ts",
+    "trips": "tsx src/trips.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

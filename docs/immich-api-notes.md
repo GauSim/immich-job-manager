@@ -164,3 +164,69 @@ Works on the real instance (ML running): 5 results for a text query, paginated l
 | Phase 6 CLIP | Handle `500` from `/search/smart` as "ML unavailable" → skip signal. |
 | Phase 1/2 visibility | Always send `filter.visibility` explicitly: omitting it also returns hidden assets (Live Photo motion parts). |
 | README (phase 8) | Document the permission list in §2. |
+
+## 10. Trip albums (phase T0)
+
+Sources: the Immich **v3.3.5 server source** (tag `v3.3.5`, `server/src`) and `npm run trips` (`tools/immich-spike/src/trips.ts`). A throwaway instance could not be started in the development sandbox (the network policy blocks the GitHub container registry download host), so the answers below come from the source. Library-specific numbers come from running `npm run trips` against the real instance (§10.6).
+
+### 10.1 Partner assets in search (SDD open question 1)
+
+- `POST /search/metadata` (v3 `filter` style) searches `[me, ...partners]`. Partners are users who share **with** me and have **"show in timeline"** (`inTimeline`) on (`SearchService.resolveSearchScopeV3` → `getUserIdsToSearch` → `getMyPartnerIds({ timelineEnabled: true })`). The legacy style does the same.
+- The v3 filter has **no owner filter** (`searchFilterBranchShape`: no `ownerId`). Own and partner assets can only be told apart client-side through `ownerId` on each item.
+- Exception: a filter fully confined to `albumIds` searches the album only, so album member reads are not affected.
+- Visibility applies to partner assets like to own ones: with `visibility in [timeline, archive]` the search also returns the partner's **archived** assets. Only `locked` is limited to the owner (`utils/database.ts`, search scope).
+- **Impact on the screenshot job (SDD open question 6):** `metadataSource` does not check `ownerId`. With a timeline-shared partner, partner screenshots are scored and added to the Screenshots album. Follow-up: filter by owner, or make it a param.
+
+### 10.2 Adding partner assets to my album
+
+- `PUT /albums/{id}/assets` checks `Permission.AssetShare` per asset. That allows **owned assets and partner assets** (`checkPartnerAccess`). Partner access needs a partner share with me (with or without `inTimeline`) and the asset's visibility `timeline` or `hidden`.
+- So a partner's **timeline** asset can be added (`success`); a partner's **archived** asset is refused with `no_permission`.
+- `npm run trips` with `TRIPS_PARTNER_ADD_TEST=1` confirms this against the real instance.
+- **Decision:** `partnerAssets` stays in the design. Partner assets are indexed only with `visibility = timeline`; archived partner assets are ignored.
+
+### 10.3 Time fields (SDD open question 2)
+
+From `MetadataService.getDates` and `MetadataRepository` (exiftool-vendored with `backfillTimezones`, `inferTimezoneFromDatestamps`, `inferTimezoneFromTimeStamp`, `geoTz` from GPS):
+
+| Field | Meaning |
+| --- | --- |
+| `exifInfo.timeZone` | From EXIF offset tags, else from **GPS position** (`geoTz`), else from datestamp inference, else `null`. Format: IANA (`Europe/Berlin`) or `UTC+7`. |
+| `fileCreatedAt` (= `exifInfo.dateTimeOriginal`) | The instant in that zone. **When `timeZone` is `null`, this is the wall-clock time read as UTC**, so it is wrong by the real UTC offset. |
+| `localDateTime` | Wall-clock time, stored with a fake `Z`. Always the local time of capture (or the file date as a fallback). |
+| No EXIF date at all | Both fall back to the earliest of file creation and modification time. |
+
+Consequences for trips:
+
+- Assets with GPS normally have a zone (via `geoTz`), so their instant is reliable.
+- Camera photos without GPS and without offset tags have `timeZone = null`. **Their instant must not be trusted.** Match them on `localDateTime` only (SDD §5.5 refined: instant when `timeZone` is set, local time otherwise).
+- Ordering and gaps use `fileCreatedAt` for assets with a zone. Assets without one are placed by local time against the local range of the trip.
+
+### 10.4 Places (reverse geocoding)
+
+`MapRepository.reverseGeocode`:
+
+- nearest populated place (500+ inhabitants, GeoNames) within the max distance → `city`, `state` (admin1), `country` (English name);
+- otherwise the Natural Earth country polygon → `country` only;
+- otherwise (open sea) all `null`.
+
+So `country` is set for almost every GPS asset on land, and `null` with GPS mostly means sea or far off-shore (SDD §5.2 already falls back to distance). Places are only computed when reverse geocoding is enabled (the default) and are frozen at metadata extraction time.
+
+### 10.5 Albums
+
+- `GET /albums` returns `startDate` / `endDate` (local time of the earliest and latest asset), `lastModifiedAssetTimestamp` and `updatedAt` for **non-empty** albums. The phase 0 key list (§6) came from an empty album, so these were missing there.
+- **Adoption pre-filter (SDD §7.4):** compare the album's `startDate`/`endDate` with the trip range from the list call alone. Read members only for albums that pass, and cache by `lastModifiedAssetTimestamp`.
+- Renaming (`PATCH /albums/{id}`, SDK `updateAlbumInfo`) needs **`album.update`**.
+
+### 10.6 Real-library numbers (SDD open question 3)
+
+Pending: run `SPIKE_SCRIPT=trips` on the NAS and copy `out/trips-stats.json` to `docs/spike-out/trips-stats.json`. Fill in GPS share per device class, the share of days with only camera photos without GPS, and how many partner assets the search returns.
+
+### 10.7 API key permissions for the trip job
+
+Added to the list in §2:
+
+| Permission | Why |
+| --- | --- |
+| `user.read` | `GET /users/me`: own user id, to tell own from partner assets. |
+| `album.update` | Rename trip albums (`PATCH /albums/{id}`). |
+| `partner.read` (optional) | Show partner shares in the UI; not needed for the job itself. |

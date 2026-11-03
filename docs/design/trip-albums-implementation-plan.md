@@ -40,22 +40,34 @@ T1 and T2 can run in parallel: T2 starts on synthetic timelines and switches to 
 
 **Goal:** answer the SDD open questions that can change the design before writing it.
 
-**Status:** not started
+**Status:** in progress (2026-11-03) – API questions answered from the Immich v3.3.5 server source; pending: `npm run trips` on the real instance
+
+- Note: a throwaway Immich could not be started in the development sandbox: the network policy blocks `pkg-containers.githubusercontent.com`, so the GHCR images can't be pulled. API behaviour was therefore read from the Immich **v3.3.5 server source** (tag `v3.3.5`) instead of observed. The `trips` script was smoke-tested against a local fake Immich. Real-library numbers come from running it on the NAS.
 
 Tasks:
 
-- [ ] Extend `tools/immich-spike` with a `trips` mode:
-  - [ ] Does `POST /search/metadata` return partner assets (`ownerId` ≠ key owner) with and without a partner sharing "in timeline"? Can `ownerId` be filtered?
-  - [ ] `PUT /albums/{id}/assets` with a partner's asset id: `success` or `no_permission`?
-  - [ ] Compare `fileCreatedAt`, `localDateTime`, `exifInfo.dateTimeOriginal` and `timeZone` for phone photos, camera photos (with and without time zone) and videos, on a trip abroad.
-  - [ ] Does `GET /albums` expose `updatedAt` / `startDate` / `endDate` usable for the adoption pre-filter?
+- [x] Extend `tools/immich-spike` with a `trips` mode:
+  - Note: `npm run trips` (`src/trips.ts`), read-only unless `TRIPS_PARTNER_ADD_TEST=1`. Compose: `SPIKE_SCRIPT=trips` in `spike.env`.
+  - [x] Does `POST /search/metadata` return partner assets (`ownerId` ≠ key owner) with and without a partner sharing "in timeline"? Can `ownerId` be filtered?
+    - Note: yes, for partners sharing **with "show in timeline"** only, including their archived assets. No owner filter in the v3 DSL; tell them apart by `ownerId` (API notes §10.1). The script reports the counts on the real library.
+  - [x] `PUT /albums/{id}/assets` with a partner's asset id: `success` or `no_permission`?
+    - Note: from source, timeline (and hidden) partner assets → `success`; archived → `no_permission` (API notes §10.2). The script's `TRIPS_PARTNER_ADD_TEST=1` confirms it on the real instance.
+  - [x] Compare `fileCreatedAt`, `localDateTime`, `exifInfo.dateTimeOriginal` and `timeZone` for phone photos, camera photos (with and without time zone) and videos, on a trip abroad.
+    - Note: from source: `timeZone` comes from EXIF offsets, else GPS (`geoTz`); when `null`, `fileCreatedAt` = wall clock read as UTC (API notes §10.3). The script reports the `timeZone`-null share and the local − instant offsets per device class. SDD §5.5 refined (local-time match when `timeZone` is null).
+  - [x] Does `GET /albums` expose `updatedAt` / `startDate` / `endDate` usable for the adoption pre-filter?
+    - Note: yes for non-empty albums, plus `lastModifiedAssetTimestamp` (API notes §10.5). SDD §7.4 updated. Renaming needs `album.update`.
 - [ ] Export an **anonymised stats report** over the real library (committed) and a **raw index export** (local only, gitignored): GPS share per device class (phone / camera / no camera / screenshot), `country` coverage when GPS is set, `timeZone` coverage.
-- [ ] If partner assets are returned today, open a follow-up for the screenshot job (SDD open question 6).
-- [ ] Record findings in `docs/immich-api-notes.md` (new section "Trips") and update the SDD where they differ.
+  - Note: the tool is done (`out/trips-stats.json` and `out/trips-index.json`, format version 1 for the T2 CLI). Pending: run on the NAS and copy the stats to `docs/spike-out/trips-stats.json`.
+- [x] If partner assets are returned today, open a follow-up for the screenshot job (SDD open question 6).
+  - Note: confirmed from source: `metadataSource` adds partner screenshots when a partner shares with "show in timeline". Decided (2026-11-03) to accept this for now; no follow-up issue.
+- [x] Record findings in `docs/immich-api-notes.md` (new section "Trips") and update the SDD where they differ.
+  - Note: API notes §10. SDD §1.3, §2, §5.5, §5.6, §7.4 and §12 updated. New key permissions for the job: `user.read`, `album.update` (API notes §10.7).
 
 - [ ] **Deliverables:** spike mode, notes, anonymised stats, local raw export.
+  - Note: spike mode and notes ✓; stats and export pending the real run.
 
 - [ ] **Done when:** SDD open questions 1, 2, 3 and 6 have answers in the notes; `partnerAssets` is either confirmed or removed from the design.
+  - Note: 1, 2 (in principle) and 6 answered; `partnerAssets` confirmed (timeline assets only). 3 and the numbers for 2 are pending the real run.
 
 ---
 
