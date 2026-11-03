@@ -26,7 +26,7 @@ import {
   type SyncMode,
 } from '../../core/models';
 import { confirm } from '../../shared/confirm-dialog';
-import { relativeTime } from '../../shared/format';
+import { parseServerDate, relativeTime } from '../../shared/format';
 import { ParamsForm } from '../../shared/params-form';
 import { StatusChip } from '../../shared/status-chip';
 
@@ -71,6 +71,7 @@ export class JobEditor {
   /** Formly mutates this object; replaced when the type changes. */
   protected readonly paramsModel = signal<Record<string, unknown>>({});
   protected readonly relativeTime = relativeTime;
+  protected readonly localTime = (iso: string) => parseServerDate(iso).toLocaleString();
 
   protected readonly form = new FormGroup({
     name: new FormControl('', {
@@ -230,11 +231,11 @@ export class JobEditor {
     });
   }
 
-  start(dryRun: boolean): void {
+  start(dryRun: boolean, fullRescan = false): void {
     const job = this.job();
     if (!job) return;
     this.starting.set(true);
-    this.api.startRun(job.id, { dryRun }).subscribe({
+    this.api.startRun(job.id, { dryRun, fullRescan }).subscribe({
       next: (run) => void this.router.navigate(['/runs', run.id]),
       error: () => this.starting.set(false),
     });

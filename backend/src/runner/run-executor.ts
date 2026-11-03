@@ -80,6 +80,11 @@ export class RunExecutor {
           ? `Resuming ${mode} of "${job.name}" (${type.id} v${type.version})`
           : `Starting ${mode} of "${job.name}" (${type.id} v${type.version})`,
       );
+      log.info(
+        run.since
+          ? `Incremental: only assets updated since ${run.since.toISOString()}`
+          : 'Full scan of the library',
+      );
 
       // Albums: dry runs only read (exclusions), real runs find or create them.
       const albums = await this.albumSync.resolve(job, {
@@ -179,6 +184,11 @@ export class RunExecutor {
           (sync.failed ? `, ${sync.failed} refused by Immich` : '') +
           ` in ${seconds(startedAt)} s`,
       );
+      // A completed full real run makes this job-type version the baseline;
+      // a later version bump forces the next run to be full again (phase 7).
+      if (!run.dryRun && !run.since && job.typeVersion !== type.version) {
+        await this.jobs.update(job.id, { typeVersion: type.version });
+      }
     } catch (e) {
       const reason: unknown = signal.aborted ? signal.reason : undefined;
       if (reason instanceof RunCancelledError) {

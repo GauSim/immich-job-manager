@@ -55,6 +55,7 @@ Before committing, run lint, format check, typecheck, tests and build for every 
 - Review generated migrations: for SQLite TypeORM often rebuilds tables (DROP + copy), which cascades deletes through foreign keys. Prefer hand-written `ALTER TABLE … ADD COLUMN`.
 - New job types: a provider with `@AlbumJobType()` implementing `JobType` (`src/core/job-type.ts`), listed in `JOB_TYPES` (`src/jobs/job-types.module.ts`). Use the blocks in `src/core/blocks/`; yield one page at a time.
 - Long-lived `AbortSignal`s (a run's) must not be passed straight to `fetch` for many requests: `ImmichClient` links a per-request signal (`linkSignal`) and releases it. Reuse option objects for libraries that cache per options instance (e.g. `exifr`).
+- Runs are created only through `RunLauncher` (`src/runner/run-launcher.ts`): it decides full vs. incremental and enforces one active run per job. Schedules live in `JobScheduler`; call `sync()`/`remove()` when a job changes.
 - Album writes go through `AlbumSyncService` (`src/sync/`); only assets recorded in `job_asset` (owned) may ever be removed. Dry runs must never change Immich.
 - Config comes from the injected `APP_CONFIG` (`AppConfig`), never `process.env` outside `config/` and `main.ts`.
 - Immich v3.x only; `@immich/sdk` pinned to the server's version.

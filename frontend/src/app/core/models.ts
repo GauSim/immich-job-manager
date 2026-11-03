@@ -77,6 +77,8 @@ export interface Job {
   createdAt: string;
   updatedAt: string;
   lastRun: Run | null;
+  /** Next scheduled run (enabled jobs with a schedule). */
+  nextRunAt: string | null;
 }
 
 export interface JobInput {

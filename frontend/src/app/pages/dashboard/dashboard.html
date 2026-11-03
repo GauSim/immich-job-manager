@@ -67,6 +67,11 @@
             @if (!job.enabled) {
               <span class="muted small"> (disabled)</span>
             }
+            @if (job.nextRunAt) {
+              <div class="muted small" data-testid="next-run">
+                next {{ relativeTime(job.nextRunAt) }}
+              </div>
+            }
           } @else {
             <span class="muted">Manual</span>
           }

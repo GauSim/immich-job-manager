@@ -122,6 +122,7 @@ jobs:
         run: |
           IMMICH_CONTRACT_URL=http://localhost:2283/api \
           IMMICH_CONTRACT_KEY="$(cat ../tools/immich-spike/out/api-key)" \
+          IMMICH_CONTRACT_UPLOAD_KEY="$(cat ../tools/immich-spike/out/upload-key)" \
           npm run test:contract
       - name: Immich logs
         if: failure()

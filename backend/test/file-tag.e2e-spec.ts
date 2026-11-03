@@ -83,7 +83,7 @@ describe('iOS tag from files (e2e)', () => {
   const run = async (jobId: string) => {
     const { body } = await http
       .post(`/api/jobs/${jobId}/runs`)
-      .send({})
+      .send({ fullRescan: true }) // full scans: this test is about the file-tag cache
       .expect(202);
     await app.get(RunQueue).idle();
     return (await http.get(`/api/runs/${body.id}`).expect(200)).body as Record<

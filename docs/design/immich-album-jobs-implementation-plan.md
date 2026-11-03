@@ -306,23 +306,31 @@ Tasks:
 
 **Goal:** no manual interaction. **Milestone M3: fully automated.**
 
-**Status:** not started
+**Status:** done (2026-11-03) – verified with a real throwaway Immich v3.3.5 (contract test) and a cron-driven e2e test; pending: a nightly run on the real library
 
 Tasks:
 
-- [ ] `SchedulerModule`: register enabled jobs' cron on boot and on job change, in `TZ`.
-- [ ] Incremental mode: `since = started_at` of the last successful run; `updatedAfter` filter.
+- [x] `SchedulerModule`: register enabled jobs' cron on boot and on job change, in `TZ`.
+  - Note: `JobScheduler` uses the `cron` package directly (already a dependency for validation) instead of `@nestjs/schedule`; jobs are (re-)registered on create/update and removed on delete/disable. The API rejects an enabled schedule without a cron expression. Job responses include `nextRunAt`.
+- [x] Incremental mode: `since = started_at` of the last successful run; `updatedAfter` filter.
   - Note (phase 5): mirror removals are skipped on incremental runs (they need all matches); only full rescans remove.
-- [ ] Forced full rescan when a job type's `version` changes or the user clicks "Full rescan".
-- [ ] Skip a scheduled trigger if the job is already running.
-- [ ] Nightly housekeeping: prune candidates (keep last 5 dry runs per job), logs older than 30 days, `VACUUM` monthly.
-- [ ] Dashboard: next run time, last run summary.
+  - Note: `RunLauncher` (shared by API and scheduler) plans each run: **real** runs are incremental since the start of the last *successful real* run; dry runs always scan everything (the review needs all candidates); the first real run is full. `job_run.full_rescan` now means "this run scans the whole library", `job_run.since` holds the incremental start. Verified against a real Immich: a screenshot uploaded after a run is picked up by the next incremental run.
+- [x] Forced full rescan when a job type's `version` changes or the user clicks "Full rescan".
+  - Note: a completed full real run stores the type version on the job (`job.type_version`); a mismatch forces the next run to be full (so the screenshot job's v2 from phase 6 triggers one full rescan). UI: "Full rescan" button in the job editor; `POST /jobs/:id/runs { fullRescan: true }`.
+- [x] Skip a scheduled trigger if the job is already running.
+  - Note: also skipped while a dry run of the job is being applied; logged as a warning.
+- [x] Nightly housekeeping: prune candidates (keep last 5 dry runs per job), logs older than 30 days, `VACUUM` monthly.
+  - Note: daily at 04:17 (`TZ`); retention from the `setting` table with defaults (`retention.dryRunCandidates` 5, `retention.logDays` 30; editable in phase 8); run history, ownership and the feature cache are never pruned; VACUUM every 30 days and only when no run is active.
+- [x] Dashboard: next run time, last run summary.
+  - Note: also in the job editor; the run page shows "full scan" / "incremental since …" and "scheduled".
 
-- [ ] **Deliverables:** nightly runs keep the album current.
+- [x] **Deliverables:** nightly runs keep the album current.
 
-- [ ] **Tests:** scheduler registration on job change; incremental run only touches updated assets (fake clock).
+- [x] **Tests:** scheduler registration on job change; incremental run only touches updated assets (fake clock).
+  - Note: unit (scheduler registration, next run in `TZ`, skip when busy, run planning, type-version baseline, housekeeping incl. settings); e2e (incremental run scans 1 of 1,000 assets and sends `filter.updatedAt.gt`; `nextRunAt` follows job changes; a real cron firing every second fills the album and then picks up a new upload); contract test against a real Immich (upload via a separate upload-only key → incremental run adds it).
 
 - [ ] **Done when:** a new screenshot uploaded during the day is in the album after the next scheduled run.
+  - Note: shown end to end with a scheduled job (e2e) and with a real Immich (contract test, incremental run); still to observe a nightly run on the real library.
 
 ---
 

@@ -87,6 +87,14 @@ async function main() {
 
   await mkdir('out', { recursive: true });
   await writeFile('out/api-key', secret);
+
+  // Separate key that may only upload: lets contract tests add new assets
+  // (incremental runs) without giving the app's key upload rights.
+  const upload = await createApiKey(
+    { apiKeyCreateDto: { name: 'immich-album-jobs-contract-upload', permissions: [Permission.AssetUpload] } },
+    auth,
+  );
+  await writeFile('out/upload-key', upload.secret);
   console.log(secret);
 }
 

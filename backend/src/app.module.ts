@@ -13,6 +13,7 @@ import { LoggingModule } from './logging/logging.module.js';
 import { PersistenceModule } from './persistence/persistence.module.js';
 import { SyncModule } from './sync/sync.module.js';
 import { FeaturesModule } from './features/asset-feature-cache.js';
+import { SettingsModule } from './settings/settings.service.js';
 
 @Module({})
 export class AppModule {
@@ -29,6 +30,7 @@ export class AppModule {
         JobTypesModule,
         SyncModule,
         FeaturesModule,
+        SettingsModule,
         HealthModule,
         ApiModule,
         ...staticFiles(config.publicDir),

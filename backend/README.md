@@ -23,6 +23,8 @@ cd ../../backend
 IMMICH_CONTRACT_URL=http://localhost:2283/api IMMICH_CONTRACT_KEY=$(cat ../tools/immich-spike/out/api-key) npm run test:contract
 ```
 
+`IMMICH_CONTRACT_UPLOAD_KEY=$(cat ../tools/immich-spike/out/upload-key)` (an upload-only key created by the seed) enables the incremental upload test. Run against a *freshly* seeded instance: the tests assume the seeded library.
+
 CI starts Immich from `.github/immich/docker-compose.yml` (job `immich-contract`).
 
 ## Scale test

@@ -1,6 +1,4 @@
-import { randomUUID } from 'node:crypto';
 import {
-  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -9,10 +7,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThan, type Repository } from 'typeorm';
 import { RunEventsService } from '../events/run-events.service.js';
 import { JobRunEntity, RunLogEntity } from '../persistence/entities/index.js';
-import { SqliteService, sqliteNow } from '../persistence/sqlite.service.js';
+import { SqliteService } from '../persistence/sqlite.service.js';
 import { RunCancelledError } from '../runner/run-errors.js';
 import { totalsOf } from '../runner/run-executor.js';
 import { RunQueue } from '../runner/run-queue.js';
+import { RunLauncher } from '../runner/run-launcher.js';
 import { JobLocks } from '../sync/job-locks.js';
 import type { LogQuery, PageQuery, StartRunDto } from './dto.js';
 import { JobsService } from './jobs.service.js';
@@ -31,43 +30,17 @@ export class RunsService {
     private readonly events: RunEventsService,
     private readonly sqlite: SqliteService,
     private readonly locks: JobLocks,
+    private readonly launcher: RunLauncher,
   ) {}
 
   async start(jobId: string, dto: StartRunDto): Promise<JobRunEntity> {
     const job = await this.jobs.getEntity(jobId);
-    const dryRun = dto.dryRun ?? job.syncMode === 'dry-run';
-    if (!dryRun && job.syncMode === 'dry-run') {
-      throw new BadRequestException(
-        'The job is in dry-run mode; change its sync mode to run it for real',
-      );
-    }
-    if (this.locks.isLocked(jobId)) {
-      throw new ConflictException(
-        'A dry run of this job is being applied; try again in a moment',
-      );
-    }
-    const id = randomUUID();
-    // One statement: no second active run per job, even with concurrent requests.
-    const { changes } = this.sqlite.db
-      .prepare(
-        `INSERT INTO job_run (id, job_id, status, "trigger", dry_run, full_rescan, created_at)
-         SELECT ?, ?, 'queued', 'manual', ?, ?, ?
-         WHERE NOT EXISTS (SELECT 1 FROM job_run WHERE job_id = ? AND ${ACTIVE_SQL})`,
-      )
-      .run(
-        id,
-        jobId,
-        dryRun ? 1 : 0,
-        dto.fullRescan ? 1 : 0,
-        sqliteNow(),
-        jobId,
-      );
-    if (changes === 0)
-      throw new ConflictException(
-        'The job already has a queued or running run',
-      );
-    this.queue.enqueue(id, jobId);
-    return this.get(id);
+    const { runId } = this.launcher.launch(job, {
+      dryRun: dto.dryRun,
+      fullRescan: dto.fullRescan,
+      trigger: 'manual',
+    });
+    return this.get(runId);
   }
 
   async get(id: string): Promise<JobRunEntity> {

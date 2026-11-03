@@ -2,7 +2,7 @@
 
 Self-hosted companion app for [Immich](https://immich.app) v3: rerunnable, schedulable batch jobs that select assets (first job: screenshots) and keep them in an Immich album. Talks to Immich only through its REST API with a scoped API key.
 
-> Status: **phase 6** – album sync plus iOS screenshot tag from files (cached per checksum) and optional CLIP. Scheduling arrives in phase 7.
+> Status: **phase 7** – fully automated: scheduled, incremental runs keep Immich albums current (iOS tag from files, optional CLIP, dry-run review and apply).
 
 ## Docs
 
@@ -104,6 +104,8 @@ The file tag is only read for borderline images (PNG or no camera EXIF, below th
 - **Mirror**: adds new matches and removes assets *this app added* that no longer match (only after a complete, non-resumed full run). Assets you add by hand are never removed.
 - **Exclusion album** (default `<target> – excluded`): move a false positive there in Immich and it stays out of all future runs.
 - Albums are found by name (or created on the first real run/apply). A rerun without library changes makes no write calls.
+- **Schedules** (cron, in `TZ`): enable a schedule on a job to run it automatically. Real runs are **incremental** (only assets updated since the last successful run); the first run, a job-type update, and "Full rescan" scan everything. Dry runs always scan everything.
+- **Housekeeping** (nightly): keeps candidates of the last 5 dry runs per job and 30 days of run logs; vacuums the database monthly.
 
 ## API (so far)
 

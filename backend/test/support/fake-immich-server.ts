@@ -239,6 +239,8 @@ export class FakeImmichLibrary {
     { albumName: string; members: Set<string> }
   >();
   private albumSeq = 0;
+  /** `updatedAt` of assets that don't set one (before any test run). */
+  static readonly OLD_DATE = '2026-01-01T00:00:00.000Z';
   /** Original file bytes per asset id; default: a PNG without the iOS tag. */
   originals = new Map<string, Buffer>();
   defaultOriginal: Buffer | null = null;
@@ -322,7 +324,7 @@ export class FakeImmichLibrary {
     const body = req.body as {
       cursor?: string;
       size?: number;
-      filter?: { albumIds?: { any?: string[] } };
+      filter?: { albumIds?: { any?: string[] }; updatedAt?: { gt?: string } };
     };
     const albumIds = body.filter?.albumIds?.any;
     const source = albumIds
@@ -339,6 +341,15 @@ export class FakeImmichLibrary {
             ),
           )
       : this.assets;
+    // Incremental runs: only assets updated after `filter.updatedAt.gt` (default: an old date).
+    const updatedAfter = body.filter?.updatedAt?.gt;
+    const filtered = updatedAfter
+      ? source.filter(
+          (a) =>
+            ((a.updatedAt as string | undefined) ??
+              FakeImmichLibrary.OLD_DATE) > updatedAfter,
+        )
+      : source;
     const offset = body.cursor
       ? (
           JSON.parse(Buffer.from(body.cursor, 'base64').toString()) as {
@@ -347,9 +358,9 @@ export class FakeImmichLibrary {
         ).offset
       : 0;
     const size = body.size ?? 1000;
-    const items = source.slice(offset, offset + size);
+    const items = filtered.slice(offset, offset + size);
     const next =
-      offset + size < source.length
+      offset + size < filtered.length
         ? Buffer.from(JSON.stringify({ offset: offset + size })).toString(
             'base64',
           )

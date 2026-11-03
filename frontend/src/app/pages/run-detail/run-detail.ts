@@ -65,6 +65,10 @@ export class RunDetail {
     const r = this.run();
     return r?.appliedAt ? parseServerDate(r.appliedAt).toLocaleString() : '';
   });
+  protected readonly sinceText = computed(() => {
+    const r = this.run();
+    return r?.since ? parseServerDate(r.since).toLocaleString() : '';
+  });
   private events?: Subscription;
   private ticker?: ReturnType<typeof setInterval>;
 
