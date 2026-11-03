@@ -108,25 +108,36 @@ Tasks:
 
 **Goal:** correct trips on the real library, before any album is written (SDD §5).
 
-**Status:** not started
+**Status:** implemented (2026-11-03) – verified on synthetic timelines; pending: `npm run trips:detect` on the real export and tuning the defaults
 
 Tasks:
 
-- [ ] `jobs/trips/` pure modules, each with unit tests:
-  - [ ] `geo.ts`: haversine, geohash cells.
-  - [ ] `home.ts`: home country and home cells per local day, weighted by distinct days, rolling window, fallback for sparse data (SDD §5.1).
-  - [ ] `away.ts`: `other-country` / `distance` / `either` (§5.2).
-  - [ ] `segment.ts`: open/extend/close trips; home stay; qualification (§5.3).
-  - [ ] `transit.ts`: last-seen-at-home rule, speed check, same-day fallback, `maxTransitHours` (§5.4).
-  - [ ] `fill.ts`: no-GPS fill by instant or local time; camera/screenshot rules; one trip per asset (§5.5).
-  - [ ] `naming.ts`: template, placeholders, `{period}` formatting, locale, empty placeholder handling (§5.8).
-  - [ ] `detect.ts`: puts it together → `ProposedGroup[]` with reasons and summary.
-- [ ] `trip.params.ts`: Zod schema with defaults (SDD §6), advanced fields grouped.
-- [ ] Synthetic timeline fixtures: Berlin → Bangkok with airport, multi-country, domestic (`distance`), weekend, moving abroad, camera with wrong time zone, home photos without GPS on departure day, ongoing trip, late SD-card import, wrongly geotagged single photo mid-trip.
-- [ ] CLI `npm run trips:detect -- <index-export.json> [params.json]`: prints trips (dates, countries, counts per reason, home per period) without touching Immich.
+- [x] `jobs/trips/` pure modules, each with unit tests:
+  - Note: tests live in `detect.spec.ts` (scenarios) and `units.spec.ts` (one `describe` per module) instead of one spec file per module.
+  - [x] `geo.ts`: haversine, geohash cells.
+    - Note: `geo-time.ts`, which also holds the local-time helpers. Cells are a 0.01° grid (~1 km) instead of geohash; no dependency needed.
+  - [x] `home.ts`: home country and home cells per local day, weighted by distinct days, rolling window, fallback for sparse data (SDD §5.1).
+    - Note: `HomeModel`, memoised per day. The window doubles (up to 2 years) while it has fewer than 5 GPS days. Up to 3 home places: cells used on ≥ 25 % of the top cell's days (e.g. office).
+  - [x] `away.ts`: `other-country` / `distance` / `either` (§5.2).
+  - [x] `segment.ts`: open/extend/close trips; home stay; qualification (§5.3).
+    - Note: qualification (min/max days, min away assets, `minimumYear`) is in `detect.ts`, which reports dropped stretches with a reason for the CLI.
+  - [x] `transit.ts`: last-seen-at-home rule, speed check, same-day fallback, `maxTransitHours` (§5.4).
+  - [x] `fill.ts`: no-GPS fill by instant or local time; camera/screenshot rules; one trip per asset (§5.5).
+    - Note: `assign()` in `detect.ts`. Assets with a time zone match by instant, those without by local time only (see SDD §5.5).
+  - [x] `naming.ts`: template, placeholders, `{period}` formatting, locale, empty placeholder handling (§5.8).
+  - [x] `detect.ts`: puts it together → `ProposedGroup[]` with reasons and summary.
+    - Note: `detectTrips()` → `DetectedTrip[]` (+ `dropped`, `home`); T3 maps these to `ProposedGroup`. Name and key use the days away (core), not the travel days (SDD §5.8). Neighbouring trips are clamped so they never overlap.
+- [x] `trip.params.ts`: Zod schema with defaults (SDD §6), advanced fields grouped.
+  - Note: fine-tuning fields are nested under `advanced` (`prefault({})`), so the generated form can collapse them in T5.
+- [x] Synthetic timeline fixtures: Berlin → Bangkok with airport, multi-country, domestic (`distance`), weekend, moving abroad, camera with wrong time zone, home photos without GPS on departure day, ongoing trip, late SD-card import, wrongly geotagged single photo mid-trip.
+  - Note: `test/support/timeline.ts` builds them. Also covered: a photo-heavy holiday (stays not-home), partner assets (`fill` / `full` / `off`), trips separated by a home stay, `minimumYear`, `includeVideos`, `fillWithoutGps`. "Late SD-card import" is not a detection case (detection always runs over the whole index); its behaviour across runs is tested with reconcile in T3/T6.
+- [x] CLI `npm run trips:detect -- <index-export.json> [params.json]`: prints trips (dates, countries, counts per reason, home per period) without touching Immich.
+  - Note: `src/jobs/trips/detect-cli.ts`, run from the build (`nest build && node dist/...`; the backend has no `tsx`). Options `--verbose` (dropped stretches with reason), `--json out.json`, `--now`. Reads the spike export via `fromIndexExport()`. Usage in `backend/README.md`, including a Docker one-liner.
 - [ ] Tune defaults on the real export (T0/T1); record changed defaults as notes here and in SDD §6.
+  - Note: pending; the user runs the CLI locally (the raw export stays private) and reports wrong or missing trips.
 
-- [ ] **Tests:** all fixtures above; property test that every asset lands in at most one trip; detection is deterministic.
+- [x] **Tests:** all fixtures above; property test that every asset lands in at most one trip; detection is deterministic.
+  - Note: 48 tests in `src/jobs/trips/`. Determinism: reversed input gives identical trips.
 
 - [ ] **Done when:** on the real library the CLI lists your known trips with correct start (departure) and end (arrival), and no obvious false trips. Remaining mistakes are documented.
 

@@ -242,11 +242,12 @@ The core range starts at the first photo abroad. The album should start at depar
 
 Departure, for core start `A`:
 
-1. Search window: `[A − maxTransitHours, A)`.
-2. Find the last asset in the window that is **at the home location** (GPS within `homeRadiusKm` of a home cell). The trip range starts right after it.
-3. If none has GPS: use the **speed check**. Take the last GPS point `P` before `A`. If the implied speed `distance(P, A) / (A − P)` is > `transitSpeedKmh`, a flight or train took place. Points between `P` and `A` that are away from the home location belong to the departure.
-4. If neither gives a boundary: the trip starts at the beginning of `A`'s **local calendar day**. This is the "same-day" rule, so morning photos at the airport before a noon flight are included.
-5. Never extend by more than `maxTransitHours`.
+1. **Speed check:** take the last GPS point `P` before `A`. If the implied speed `distance(P, A) / (A − P)` is > `transitSpeedKmh`, a flight or train took place, and the search window is `[A − maxTransitHours, A)`. Otherwise (drove, or no photos on the way) the window is only `A`'s **local calendar day**, still at most `maxTransitHours`.
+2. Walk back from `A` over the GPS points in the window. The first one **at a home place** (within `homeRadiusKm`) ends the walk, and the trip starts right after it.
+3. If the walk reaches the window's start without a home place, the trip starts at the earliest GPS point walked (e.g. the airport photo the evening before).
+4. Without any GPS point in the window: the trip starts at the beginning of `A`'s local day, the "same-day" rule. Morning camera photos at the airport before a noon flight are then included.
+
+(T2: implemented in `jobs/trips/transit.ts`; the rule each trip used is shown by the tuning CLI.)
 
 Return: mirrored (first asset at the home location after the core end, bounded by `maxTransitHours`; fallback the end of the local day of arrival).
 
@@ -270,7 +271,7 @@ Sat 09:30  home (GPS 0.1 km)                    → not in trip  ◄ trip ends b
 An asset without GPS joins a trip when:
 
 - `fillWithoutGps = 'camera'` (default): `has_camera` and not `is_screenshot`; or `'all'`; or `'none'`;
-- and its time falls inside the trip range: the **instant** when `timeZone` is set; the **local wall-clock time** against the trip's local range when `timeZone` is `null` (its instant is not real, API notes §10.3). An asset with a zone whose local time falls inside the range but whose instant does not (camera clock still on home time, but with an offset tag) is also accepted.
+- and its time falls inside the trip range: the **instant** when `timeZone` is set; the **local wall-clock time** against the trip's local range when `timeZone` is `null` (its instant is not real, API notes §10.3). (T2: the extra "local time also accepted for assets with a zone" case was dropped. It could put one asset into two neighbouring trips, and the real library has no such camera class.)
 - The asset must not lie in more than one trip. It goes to the trip whose range contains its instant first.
 
 Videos follow the same rules (`includeVideos`). Phone videos usually have GPS.
@@ -295,6 +296,8 @@ A trip is **ongoing** when its last away point is less than `ongoingGraceDays` a
 
 `nameTemplate`, default `{countries} – {period}`.
 
+The name and the trip key use the **days away** (first to last away photo), not the travel days. An evening flight then doesn't put the previous month into the name, and the key `trip:<first day away>` stays stable when a travel-day boundary moves between runs (T2).
+
 | Placeholder | Example |
 | --- | --- |
 | `{countries}` | `Thailand & Cambodia` (top 3 by time spent, then `+N`) |
@@ -310,6 +313,8 @@ Month names use the `locale` param (default `en`). An empty placeholder is dropp
 ---
 
 ## 6. Parameters
+
+T2: the fine-tuning fields (`homeWindowDays` … `ongoingGraceDays`, `adoptMinShare`) are nested under `advanced`; see `backend/src/jobs/trips/trip.params.ts`.
 
 ```typescript
 type TripParams = {

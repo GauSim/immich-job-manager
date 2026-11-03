@@ -31,6 +31,30 @@ CI starts Immich from `.github/immich/docker-compose.yml` (job `immich-contract`
 
 `npm run test:scale` (also in CI): 100k fake assets with sample originals; prints runtime, files read, cache hits and heap per run, and asserts that the second run reads no files and that no memory is retained.
 
+## Trip detection tuning
+
+`npm run trips:detect` runs the trip detection of the trip albums job (`docs/design/trip-albums-SDD.md` §5) over a raw index export and prints the detected trips. It never talks to Immich.
+
+1. Create the export with `tools/immich-spike` → `npm run trips`, which writes `out/trips-index.json`. Keep it private: it holds your GPS history.
+2. Run it:
+
+```bash
+npm run trips:detect -- /path/to/trips-index.json
+```
+
+| Option | |
+| --- | --- |
+| `params.json` (second argument) | Job params to try, same shape as the job's, e.g. `{ "minTripDays": 1, "advanced": { "maxGapHours": 48 } }` |
+| `--verbose` | Also list the stretches away that did not count as trips, and why (`too-short`, `too-few-assets`, `too-long`, `before-minimum-year`). |
+| `--json out.json` | Write all trips with their asset ids and reasons. |
+| `--now <ISO>` | Pretend "now" is this time (affects ongoing trips). |
+
+Without Node on your machine, use Docker from the repository root:
+
+```bash
+docker run --rm -v "$PWD":/repo -v /path/to/trips-index.json:/trips-index.json:ro -w /repo/backend node:22 sh -c "npm ci && npm run trips:detect -- /trips-index.json"
+```
+
 ## Database migrations
 
 SQLite via TypeORM; migrations run on boot, `synchronize` is off. After changing an entity:
