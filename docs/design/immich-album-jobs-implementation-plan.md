@@ -44,33 +44,43 @@ P6 and P7 are independent and can be done in either order.
 
 **Goal:** an empty but buildable monorepo, and certainty about the Immich v3 API shapes.
 
+**Status:** done (2026-11-03) – pending: first green CI run on GitHub, spike rerun against the real instance
+
 Tasks:
 
-1. Create repo layout:
-   ```text
-   immich-album-jobs/
-     backend/          # NestJS
-     frontend/         # Angular
-     worker-py/        # empty placeholder
-     docs/             # SDD, this plan
-     Dockerfile
-     docker-compose.yml
-     .env.example
-     secrets/.gitkeep  # gitignored contents
-   ```
-2. Scaffold `nest new backend` and `ng new frontend --standalone --routing --style=scss`; add Angular Material.
-3. Shared tooling: Node 22 via `.nvmrc`, ESLint + Prettier, `npm` workspaces or two independent packages.
-4. CI (GitHub Actions or similar): lint, unit tests, build both apps, build Docker image.
-5. **API spike** (scratch script with `@immich/sdk` against your instance):
-   - `GET /server/about` → confirm v3.x.
-   - `POST /search/metadata` with `type: IMAGE`, `withExif: true`, `size: 1000` → confirm `originalFileName`, `originalMimeType`, `exifInfo.make/model`, dimensions, `checksum`.
-   - `PUT /albums/{id}/assets` on a test album → confirm per-id response shape.
-   - `curl -r 0-65535` on `GET /assets/{id}/original` for an iPhone screenshot → check for `206 Partial Content`.
-   - Note required API key permissions.
+- [x] Create repo layout:
+  ```text
+  immich-album-jobs/
+    backend/          # NestJS
+    frontend/         # Angular
+    worker-py/        # empty placeholder
+    docs/             # SDD, this plan
+    Dockerfile
+    docker-compose.yml
+    .env.example
+    secrets/.gitkeep  # gitignored contents
+  ```
+  - Note: repo is `immich-job-manager`; added `tools/immich-spike/` for the API spike and a root `package.json` with convenience scripts only.
+- [x] Scaffold `nest new backend` and `ng new frontend --standalone --routing --style=scss`; add Angular Material.
+  - Note: NestJS 12 (ESM, Vitest instead of Jest), Angular 22 (Vitest via `ng test`). Hello-world replaced by a placeholder `GET /api/health` (global prefix `api`) so the Docker healthcheck works; phase 1 extends it.
+  - Note: backend Vitest bumped 4 → 5 (npm 10 crashed resolving the scaffold's Vitest 4 peer set).
+- [x] Shared tooling: Node 22 via `.nvmrc`, ESLint + Prettier, `npm` workspaces or two independent packages.
+  - Note: two independent packages (own lockfiles), matching the Dockerfile. Frontend lints with ESLint (`angular-eslint`); backend keeps NestJS 12's default **oxlint** (type-aware) instead of ESLint. Prettier in both, `format:check` in CI. Root `.editorconfig`.
+- [x] CI (GitHub Actions or similar): lint, unit tests, build both apps, build Docker image.
+  - Note: `.github/workflows/ci.yml` – backend, frontend, spike typecheck, Docker build + `/api/health` smoke test. Docker image built and smoke-tested locally.
+- [x] **API spike** (scratch script with `@immich/sdk` against your instance):
+  - [x] `GET /server/about` → confirm v3.x.
+  - [x] `POST /search/metadata` with `type: IMAGE`, `withExif: true`, `size: 1000` → confirm `originalFileName`, `originalMimeType`, `exifInfo.make/model`, dimensions, `checksum`.
+  - [x] `PUT /albums/{id}/assets` on a test album → confirm per-id response shape.
+  - [x] `curl -r 0-65535` on `GET /assets/{id}/original` for an iPhone screenshot → check for `206 Partial Content`.
+  - [x] Note required API key permissions.
+  - Note: run against a throwaway Immich **v3.3.5** seeded with synthetic fixtures (`tools/immich-spike`), not yet against the real instance. Key findings: `page` is deprecated in v3.3 → use `filter` + `cursor`; `total` is per page; Range is honoured (206); `UserComment` comes back as raw bytes. See `docs/immich-api-notes.md` §9 for the impact on later phases.
+  - [ ] Rerun `npm run spike` against the real Immich instance (incl. `SPIKE_ASSET_ID` of a real iPhone screenshot) and diff with the notes.
 
-**Deliverables:** repo, green CI, spike notes in `docs/immich-api-notes.md`.
+- [x] **Deliverables:** repo, green CI, spike notes in `docs/immich-api-notes.md`.
+  - Note: CI green locally (lint, tests, build, Docker); first GitHub Actions run to be confirmed after push.
 
-**Done when:** both apps build in CI; spike answers the open items in SDD §13.3.
+- [x] **Done when:** both apps build in CI; spike answers the open items in SDD §13.3.
 
 ---
 
@@ -78,25 +88,29 @@ Tasks:
 
 **Goal:** a NestJS app that starts, validates config, has a database, and talks to Immich.
 
+**Status:** not started
+
 Tasks:
 
-1. `ConfigModule`: Zod schema for all env vars; read `*_FILE` secrets; fail fast with clear messages.
-2. `PersistenceModule`: `@nestjs/typeorm` with `better-sqlite3`, WAL pragma, `synchronize: false`, migrations folder, migration run on boot.
-3. Entities + first migration: `job`, `job_run`, `run_candidate`, `job_asset`, `asset_feature`, `run_log`, `setting`, with indexes.
-4. `ImmichModule` / `ImmichClient`:
-   - SDK init with base URL and key.
-   - `assertCompatible()` (major = 3) on boot.
-   - Retry with backoff on 429/5xx, `X-Correlation-ID` logging.
-   - Concurrency limiters (`p-limit`): API = 2, file reads = 4.
-   - Methods: `searchMetadataPage`, `searchSmart`, `findOrCreateAlbum`, `listAlbumMemberIds`, `addToAlbum` (chunked), `removeFromAlbum` (chunked), `readOriginalHead`, `getThumbnail`.
-5. `GET /api/health` (DB + Immich reachability + version).
-6. Pino logging with request ids.
+- [ ] `ConfigModule`: Zod schema for all env vars; read `*_FILE` secrets; fail fast with clear messages.
+- [ ] `PersistenceModule`: `@nestjs/typeorm` with `better-sqlite3`, WAL pragma, `synchronize: false`, migrations folder, migration run on boot.
+- [ ] Entities + first migration: `job`, `job_run`, `run_candidate`, `job_asset`, `asset_feature`, `run_log`, `setting`, with indexes.
+- [ ] `ImmichModule` / `ImmichClient`:
+  - [ ] SDK init with base URL and key.
+  - [ ] `assertCompatible()` (major = 3) on boot.
+    - Note (phase 0 spike): use `GET /server/version` (structured, no permission needed).
+  - [ ] Retry with backoff on 429/5xx, `X-Correlation-ID` logging.
+  - [ ] Concurrency limiters (`p-limit`): API = 2, file reads = 4.
+  - [ ] Methods: `searchMetadataPage`, `searchSmart`, `findOrCreateAlbum`, `listAlbumMemberIds`, `addToAlbum` (chunked), `removeFromAlbum` (chunked), `readOriginalHead`, `getThumbnail`.
+    - Note (phase 0 spike): `searchMetadataPage` must use the v3.3 `filter` + `orderBy` + `cursor` request style (`page` is deprecated); add/remove return per-id `success`/`error`. See `docs/immich-api-notes.md` §9.
+- [ ] `GET /api/health` (DB + Immich reachability + version).
+- [ ] Pino logging with request ids.
 
-**Deliverables:** `docker compose up` starts the backend; `/api/health` reports Immich v3.
+- [ ] **Deliverables:** `docker compose up` starts the backend; `/api/health` reports Immich v3.
 
-**Tests:** config validation, ImmichClient against a mocked HTTP server (retries, chunking, version check).
+- [ ] **Tests:** config validation, ImmichClient against a mocked HTTP server (retries, chunking, version check).
 
-**Done when:** health endpoint is green against your real Immich; invalid config stops boot with a readable error.
+- [ ] **Done when:** health endpoint is green against your real Immich; invalid config stops boot with a readable error.
 
 ---
 
@@ -104,26 +118,29 @@ Tasks:
 
 **Goal:** generic job execution, before any real job logic.
 
+**Status:** not started
+
 Tasks:
 
-1. `core/job-type.ts`: `JobType`, `JobContext`, `Candidate`, `CandidateBatch` interfaces.
-2. `@AlbumJobType()` decorator + `JobTypesModule` discovery via `DiscoveryService`; params JSON Schema via `zod-to-json-schema`.
-3. Blocks: `metadataSource` (paged, cursor = page number + `updatedAfter`), `filenameScorer`, `exifScorer`, `albumSource`.
-4. `RunQueue`: one run per job, `MAX_CONCURRENT_RUNS` overall, FIFO.
-5. `RunExecutor`:
-   - Create `job_run`, iterate batches, persist each batch + cursor + totals in **one transaction per page**.
-   - `AbortController` cancellation.
-   - On boot: `running` → `interrupted`.
-   - Resume from stored cursor.
-6. `EventsModule`: SSE per run, throttled to 1 progress event/s, plus log lines.
-7. Jobs API: `GET /job-types`, CRUD `/jobs`, `POST /jobs/:id/runs`, `GET /jobs/:id/runs`, `GET /runs/:id`, `POST /runs/:id/cancel`, `POST /runs/:id/resume`, `GET /runs/:id/events`.
-8. A `noop-test` job type that pages through the library and matches nothing.
+- [ ] `core/job-type.ts`: `JobType`, `JobContext`, `Candidate`, `CandidateBatch` interfaces.
+- [ ] `@AlbumJobType()` decorator + `JobTypesModule` discovery via `DiscoveryService`; params JSON Schema via `zod-to-json-schema`.
+- [ ] Blocks: `metadataSource` (paged, cursor = page number + `updatedAfter`), `filenameScorer`, `exifScorer`, `albumSource`.
+  - Note (phase 0 spike): cursor = Immich's opaque `nextCursor` (offset-based, so resume is at-least-once); `updatedAfter` → `filter.updatedAt.gt`.
+- [ ] `RunQueue`: one run per job, `MAX_CONCURRENT_RUNS` overall, FIFO.
+- [ ] `RunExecutor`:
+  - [ ] Create `job_run`, iterate batches, persist each batch + cursor + totals in **one transaction per page**.
+  - [ ] `AbortController` cancellation.
+  - [ ] On boot: `running` → `interrupted`.
+  - [ ] Resume from stored cursor.
+- [ ] `EventsModule`: SSE per run, throttled to 1 progress event/s, plus log lines.
+- [ ] Jobs API: `GET /job-types`, CRUD `/jobs`, `POST /jobs/:id/runs`, `GET /jobs/:id/runs`, `GET /runs/:id`, `POST /runs/:id/cancel`, `POST /runs/:id/resume`, `GET /runs/:id/events`.
+- [ ] A `noop-test` job type that pages through the library and matches nothing.
 
-**Deliverables:** start, cancel and resume a run via API; watch progress via SSE.
+- [ ] **Deliverables:** start, cancel and resume a run via API; watch progress via SSE.
 
-**Tests:** runner with a fake source: cursor resume after simulated crash, cancellation, flat memory over 100k fake assets.
+- [ ] **Tests:** runner with a fake source: cursor resume after simulated crash, cancellation, flat memory over 100k fake assets.
 
-**Done when:** a noop run over your full library completes and reports the correct `scanned` count.
+- [ ] **Done when:** a noop run over your full library completes and reports the correct `scanned` count.
 
 ---
 
@@ -131,21 +148,23 @@ Tasks:
 
 **Goal:** first real job, preview only.
 
+**Status:** not started
+
 Tasks:
 
-1. `ScreenshotParams` Zod schema with defaults (threshold 0.6, patterns, resolution list, `readIosTag` false for now, CLIP disabled).
-2. Scoring: filename, PNG, no camera EXIF, screen dimensions. Images only (`type: IMAGE`).
-3. Reasons per candidate.
-4. Dry-run persistence: `run_candidate` rows (batched), `selected = true` by default.
-5. Candidates API: `GET /runs/:id/candidates` (paged, sort by score, filter by score band), `PATCH /runs/:id/candidates` (tick/untick).
-6. Thumbnail proxy `GET /assets/:id/thumbnail` (only assets present in a run).
-7. Fixture set: anonymised metadata JSON for screenshots, camera photos and edge cases (exported graphics, wallpapers).
+- [ ] `ScreenshotParams` Zod schema with defaults (threshold 0.6, patterns, resolution list, `readIosTag` false for now, CLIP disabled).
+- [ ] Scoring: filename, PNG, no camera EXIF, screen dimensions. Images only (`type: IMAGE`).
+- [ ] Reasons per candidate.
+- [ ] Dry-run persistence: `run_candidate` rows (batched), `selected = true` by default.
+- [ ] Candidates API: `GET /runs/:id/candidates` (paged, sort by score, filter by score band), `PATCH /runs/:id/candidates` (tick/untick).
+- [ ] Thumbnail proxy `GET /assets/:id/thumbnail` (only assets present in a run).
+- [ ] Fixture set: anonymised metadata JSON for screenshots, camera photos and edge cases (exported graphics, wallpapers).
 
-**Deliverables:** a full dry run on your library returns scored candidates via API.
+- [ ] **Deliverables:** a full dry run on your library returns scored candidates via API.
 
-**Tests:** each signal and the threshold on fixtures.
+- [ ] **Tests:** each signal and the threshold on fixtures.
 
-**Done when:** a dry run over 30k assets finishes and the top candidates look right when spot-checked in Immich.
+- [ ] **Done when:** a dry run over 30k assets finishes and the top candidates look right when spot-checked in Immich.
 
 ---
 
@@ -153,21 +172,23 @@ Tasks:
 
 **Goal:** everything from phases 2–3 usable in the browser. **Milestone M1.**
 
+**Status:** not started
+
 Tasks:
 
-1. App shell: Material toolbar, routes (`/jobs`, `/jobs/:id`, `/runs/:id`, `/settings`), HTTP interceptor for errors (field errors, snackbar, retry).
-2. Dashboard: Immich status, job list with last run and status chip, buttons "Run now" / "Dry run".
-3. Job editor: job type select, albums, sync mode, cron input, params form generated with ngx-formly (Material theme) from JSON Schema.
-4. Run detail: progress bar, live log via SSE (`EventSource`), totals, cancel/resume.
-5. Review grid (dry runs): CDK virtual scroll, lazy thumbnails, score badge, reasons, checkbox, score-band chips, sort.
-6. Confirmation dialogs for destructive actions (placeholder until phase 5).
-7. Build into backend `/public`; `ServeStaticModule` with SPA fallback.
+- [ ] App shell: Material toolbar, routes (`/jobs`, `/jobs/:id`, `/runs/:id`, `/settings`), HTTP interceptor for errors (field errors, snackbar, retry).
+- [ ] Dashboard: Immich status, job list with last run and status chip, buttons "Run now" / "Dry run".
+- [ ] Job editor: job type select, albums, sync mode, cron input, params form generated with ngx-formly (Material theme) from JSON Schema.
+- [ ] Run detail: progress bar, live log via SSE (`EventSource`), totals, cancel/resume.
+- [ ] Review grid (dry runs): CDK virtual scroll, lazy thumbnails, score badge, reasons, checkbox, score-band chips, sort.
+- [ ] Confirmation dialogs for destructive actions (placeholder until phase 5).
+- [ ] Build into backend `/public`; `ServeStaticModule` with SPA fallback.
 
-**Deliverables:** create a screenshot job, run a dry run, review it in the grid.
+- [ ] **Deliverables:** create a screenshot job, run a dry run, review it in the grid.
 
-**Tests:** component tests for review grid and generated form; one Playwright smoke test (create job → dry run → grid shows items).
+- [ ] **Tests:** component tests for review grid and generated form; one Playwright smoke test (create job → dry run → grid shows items).
 
-**Done when:** the review grid scrolls smoothly through several thousand candidates.
+- [ ] **Done when:** the review grid scrolls smoothly through several thousand candidates.
 
 ---
 
@@ -175,20 +196,22 @@ Tasks:
 
 **Goal:** real changes in Immich. **Milestone M2: screenshot album filled.**
 
+**Status:** not started
+
 Tasks:
 
-1. `AlbumSyncService`: resolve/create target and exclusion albums; compute `toAdd = matches − members − excluded`; mirror: `toRemove = owned − matches`.
-2. Write in chunks of 500; record `job_asset` ownership rows per successful id.
-3. Sync modes `additive` and `mirror` in the runner (real runs).
-4. Real runs store totals only, no `run_candidate` rows.
-5. `POST /runs/:id/apply` for dry runs (selected candidates only).
-6. UI: "Apply to album" with confirmation dialog showing counts; mirror-mode save confirmation.
+- [ ] `AlbumSyncService`: resolve/create target and exclusion albums; compute `toAdd = matches − members − excluded`; mirror: `toRemove = owned − matches`.
+- [ ] Write in chunks of 500; record `job_asset` ownership rows per successful id.
+- [ ] Sync modes `additive` and `mirror` in the runner (real runs).
+- [ ] Real runs store totals only, no `run_candidate` rows.
+- [ ] `POST /runs/:id/apply` for dry runs (selected candidates only).
+- [ ] UI: "Apply to album" with confirmation dialog showing counts; mirror-mode save confirmation.
 
-**Deliverables:** screenshots album in Immich, filled by an applied dry run or an additive run.
+- [ ] **Deliverables:** screenshots album in Immich, filled by an applied dry run or an additive run.
 
-**Tests:** sync diff (additive, mirror, ownership, exclusion, idempotent rerun = zero writes); contract test against a throwaway Immich v3 in CI.
+- [ ] **Tests:** sync diff (additive, mirror, ownership, exclusion, idempotent rerun = zero writes); contract test against a throwaway Immich v3 in CI.
 
-**Done when:** a second run without library changes makes zero album write calls; moving an asset to the exclusion album keeps it out after the next run.
+- [ ] **Done when:** a second run without library changes makes zero album write calls; moving an asset to the exclusion album keeps it out after the next run.
 
 ---
 
@@ -196,21 +219,23 @@ Tasks:
 
 **Goal:** high accuracy on iPhone screenshots without heavy I/O.
 
+**Status:** not started
+
 Tasks:
 
-1. `AssetFeatureCache` service over `asset_feature` (lookup by `asset_id` + `checksum`).
-2. `fileTagScorer`: `readOriginalHead` with `Range: bytes=0-65535` (or stream-and-abort, per phase 0 result), parse with `exifr`, detect `UserComment = "Screenshot"`.
-3. Only read when needed: PNG or no camera EXIF, and not already ≥ threshold from metadata.
-4. File reads limited by `MAX_FILE_READS`; totals `files_read`, `cache_hits`.
-5. `smartSource` + `rankScorer` for optional CLIP queries; rank map built once per run.
-6. Enable `readIosTag` by default.
-7. Scale test with a fake Immich serving 100k assets and sample PNGs: memory, runtime, read count.
+- [ ] `AssetFeatureCache` service over `asset_feature` (lookup by `asset_id` + `checksum`).
+- [ ] `fileTagScorer`: `readOriginalHead` with `Range: bytes=0-65535` (or stream-and-abort, per phase 0 result), parse with `exifr`, detect `UserComment = "Screenshot"`.
+- [ ] Only read when needed: PNG or no camera EXIF, and not already ≥ threshold from metadata.
+- [ ] File reads limited by `MAX_FILE_READS`; totals `files_read`, `cache_hits`.
+- [ ] `smartSource` + `rankScorer` for optional CLIP queries; rank map built once per run.
+- [ ] Enable `readIosTag` by default.
+- [ ] Scale test with a fake Immich serving 100k assets and sample PNGs: memory, runtime, read count.
 
-**Deliverables:** iOS screenshots named `IMG_xxxx.PNG` reliably land in the album.
+- [ ] **Deliverables:** iOS screenshots named `IMG_xxxx.PNG` reliably land in the album.
 
-**Tests:** sample PNGs with and without the tag, a re-encoded screenshot (tag missing), cache hit on second run.
+- [ ] **Tests:** sample PNGs with and without the tag, a re-encoded screenshot (tag missing), cache hit on second run.
 
-**Done when:** a second full run reads close to zero files (cache hits); a full run over 30k assets completes within an acceptable window on your hardware.
+- [ ] **Done when:** a second full run reads close to zero files (cache hits); a full run over 30k assets completes within an acceptable window on your hardware.
 
 ---
 
@@ -218,20 +243,22 @@ Tasks:
 
 **Goal:** no manual interaction. **Milestone M3: fully automated.**
 
+**Status:** not started
+
 Tasks:
 
-1. `SchedulerModule`: register enabled jobs' cron on boot and on job change, in `TZ`.
-2. Incremental mode: `since = started_at` of the last successful run; `updatedAfter` filter.
-3. Forced full rescan when a job type's `version` changes or the user clicks "Full rescan".
-4. Skip a scheduled trigger if the job is already running.
-5. Nightly housekeeping: prune candidates (keep last 5 dry runs per job), logs older than 30 days, `VACUUM` monthly.
-6. Dashboard: next run time, last run summary.
+- [ ] `SchedulerModule`: register enabled jobs' cron on boot and on job change, in `TZ`.
+- [ ] Incremental mode: `since = started_at` of the last successful run; `updatedAfter` filter.
+- [ ] Forced full rescan when a job type's `version` changes or the user clicks "Full rescan".
+- [ ] Skip a scheduled trigger if the job is already running.
+- [ ] Nightly housekeeping: prune candidates (keep last 5 dry runs per job), logs older than 30 days, `VACUUM` monthly.
+- [ ] Dashboard: next run time, last run summary.
 
-**Deliverables:** nightly runs keep the album current.
+- [ ] **Deliverables:** nightly runs keep the album current.
 
-**Tests:** scheduler registration on job change; incremental run only touches updated assets (fake clock).
+- [ ] **Tests:** scheduler registration on job change; incremental run only touches updated assets (fake clock).
 
-**Done when:** a new screenshot uploaded during the day is in the album after the next scheduled run.
+- [ ] **Done when:** a new screenshot uploaded during the day is in the album after the next scheduled run.
 
 ---
 
@@ -239,18 +266,20 @@ Tasks:
 
 **Goal:** a stable v1.0 you can leave running. **Release v1.0.**
 
+**Status:** not started
+
 Tasks:
 
-1. `AuthModule`: password login with session cookie (`httpOnly`, `SameSite=Strict`), `AUTH_MODE=forward-auth` to disable.
-2. Settings page: connection test, Immich version, retention, defaults; export/import jobs as JSON (`/jobs/export`, `/jobs/import`).
-3. Thumbnail proxy restriction verified; container runs as `node`, read-only root filesystem tested.
-4. Final Dockerfile and `docker-compose.yml`, `.env.example`, healthcheck.
-5. README: setup, API key creation and permissions, network name check, backup (`sqlite3 app.db ".backup ..."`), upgrade.
-6. Tag image `v1.0.0`.
+- [ ] `AuthModule`: password login with session cookie (`httpOnly`, `SameSite=Strict`), `AUTH_MODE=forward-auth` to disable.
+- [ ] Settings page: connection test, Immich version, retention, defaults; export/import jobs as JSON (`/jobs/export`, `/jobs/import`).
+- [ ] Thumbnail proxy restriction verified; container runs as `node`, read-only root filesystem tested.
+- [ ] Final Dockerfile and `docker-compose.yml`, `.env.example`, healthcheck.
+- [ ] README: setup, API key creation and permissions, network name check, backup (`sqlite3 app.db ".backup ..."`), upgrade.
+- [ ] Tag image `v1.0.0`.
 
-**Deliverables:** documented, password-protected v1.0 image.
+- [ ] **Deliverables:** documented, password-protected v1.0 image.
 
-**Done when:** a fresh setup from the README works end to end in under 15 minutes.
+- [ ] **Done when:** a fresh setup from the README works end to end in under 15 minutes.
 
 ---
 
@@ -258,14 +287,16 @@ Tasks:
 
 **Goal:** custom ML for job types Immich cannot cover.
 
+**Status:** not started
+
 Tasks:
 
-1. `worker-py/`: FastAPI, `POST /score`, `GET /health`, own read-only API key, thumbnail fetching with a concurrency limit.
-2. `remoteScorer` block in the backend; job types using it are disabled when `PY_WORKER_URL` is unset.
-3. Compose profile `ml`.
-4. First ML job type, chosen when needed.
+- [ ] `worker-py/`: FastAPI, `POST /score`, `GET /health`, own read-only API key, thumbnail fetching with a concurrency limit.
+- [ ] `remoteScorer` block in the backend; job types using it are disabled when `PY_WORKER_URL` is unset.
+- [ ] Compose profile `ml`.
+- [ ] First ML job type, chosen when needed.
 
-**Done when:** a job type using `remoteScorer` runs end to end with `docker compose --profile ml up -d`.
+- [ ] **Done when:** a job type using `remoteScorer` runs end to end with `docker compose --profile ml up -d`.
 
 ---
 

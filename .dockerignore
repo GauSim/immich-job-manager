@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+**/coverage
+**/.angular
+**/*.tsbuildinfo
+.git
+.github
+data
+secrets
+.env
+docs
+tools
+worker-py

@@ -198,7 +198,7 @@ Target **Immich v3.x only**, through `@immich/sdk` pinned to the server's major 
 | Purpose | Endpoint | Notes |
 | --- | --- | --- |
 | Version check at startup | `GET /server/about` | Refuse to run jobs if major ≠ 3. |
-| Enumerate the library | `POST /search/metadata` | Paged, `page`/`size` integers. Filters: `type`, `updatedAfter`, `albumIds`, `withExif`, `visibility`. |
+| Enumerate the library | `POST /search/metadata` | Cursor-paged (`filter` DSL + `cursor`; `page` is deprecated in v3.3, see API notes). Filters: `type`, `updatedAt`, `albumIds`, `visibility`; `withExif`. |
 | Semantic signal | `POST /search/smart` | CLIP text query; requires Immich ML. |
 | Find or create albums | `GET /albums`, `POST /albums` | v3: `isShared`, `isOwned` query params. |
 | Read album members | `POST /search/metadata` with `albumIds` | v3 removed `assets` from album responses. |
@@ -601,12 +601,16 @@ docker compose up -d --build
 
 ### 13.3 Open items
 
-| Item | Owner | How to close |
-| --- | --- | --- |
-| Does Immich honour HTTP `Range` on `GET /assets/{id}/original`? | Simon | Test with `curl -r 0-65535` in phase 6; otherwise use stream-and-abort. |
-| Exact API key permission names for v3 | Simon | Check the Immich key dialog when creating the key. |
-| Is `withExif` returning `make`/`model`/`mimeType` in search results on v3.3? | Simon | Verify in phase 1 spike. |
-| Simple rules via Immich Workflows | Later | Revisit when Workflows leave preview. |
+Phase 0 spike results: [`docs/immich-api-notes.md`](../immich-api-notes.md) (verified on v3.3.5).
+
+| Item | Owner | How to close | Status |
+| --- | --- | --- | --- |
+| Does Immich honour HTTP `Range` on `GET /assets/{id}/original`? | Simon | Test with `curl -r 0-65535` in phase 6; otherwise use stream-and-abort. | **Closed:** yes, `206 Partial Content`; 64 KiB is enough to parse `UserComment`. |
+| Exact API key permission names for v3 | Simon | Check the Immich key dialog when creating the key. | **Closed:** `server.about`, `asset.read`, `asset.view`, `asset.download`, `album.read`, `album.create`, `albumAsset.create`, `albumAsset.delete`. |
+| Is `withExif` returning `make`/`model`/`mimeType` in search results on v3.3? | Simon | Verify in phase 1 spike. | **Closed:** yes; MIME type is `originalMimeType` on the asset, not in `exifInfo`. |
+| Simple rules via Immich Workflows | Later | Revisit when Workflows leave preview. | Open |
+
+Also found: `page` on `POST /search/metadata` is deprecated in v3.3; use the `filter` DSL with `cursor` pagination (notes §4.1).
 
 ### 13.4 Sources
 
