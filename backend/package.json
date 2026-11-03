@@ -1,7 +1,7 @@
 {
   "name": "immich-album-jobs-backend",
   "version": "1.0.0",
-  "description": "Immich Album Jobs – NestJS backend",
+  "description": "Immich Album Jobs \u2013 NestJS backend",
   "author": "",
   "private": true,
   "license": "UNLICENSED",
@@ -25,7 +25,8 @@
     "migration:run": "npm run build && typeorm migration:run -d dist/persistence/data-source.cli.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:contract": "vitest run --config ./vitest.config.contract.ts",
-    "test:scale": "vitest run --config ./vitest.config.scale.ts"
+    "test:scale": "vitest run --config ./vitest.config.scale.ts",
+    "trips:detect": "nest build && node dist/jobs/trips/detect-cli.js"
   },
   "dependencies": {
     "@immich/sdk": "^3.3.5",
