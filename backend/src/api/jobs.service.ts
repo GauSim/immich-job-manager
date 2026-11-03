@@ -25,6 +25,8 @@ import {
 export const ACTIVE_STATUSES = ['queued', 'running'] as const;
 
 export interface JobView extends JobEntity {
+  /** `groups`: one album per group (e.g. trip albums), no target album. */
+  typeKind: 'assets' | 'groups';
   /** Effective exclusion album name (default applied). */
   effectiveExclusionAlbumName: string;
   lastRun: JobRunEntity | null;
@@ -245,6 +247,11 @@ export class JobsService {
   private view(job: JobEntity, lastRun: JobRunEntity | null): JobView {
     return Object.assign(Object.create(null) as object, job, {
       effectiveExclusionAlbumName: exclusionAlbumName(job),
+      typeKind:
+        this.registry.has(job.typeId) &&
+        isGroupJobType(this.registry.get(job.typeId))
+          ? 'groups'
+          : 'assets',
       lastRun,
       nextRunAt: this.scheduler.nextRun(job.id),
     }) as JobView;

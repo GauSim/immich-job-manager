@@ -57,6 +57,7 @@ describe('generated params form', () => {
     expect(humanize('pageSize')).toBe('Page size');
     expect(humanize('readIosTag')).toBe('Read iOS tag');
     expect(humanize('clip')).toBe('CLIP');
+    expect(humanize('fillWithoutGps')).toBe('Fill without GPS');
     expect(humanize('topN')).toBe('Top N');
   });
 

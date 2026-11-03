@@ -91,22 +91,37 @@ export class ChipsType extends FieldType<FieldTypeConfig> {
 })
 export class ToggleType extends FieldType<FieldTypeConfig> {}
 
-/** Nested object (e.g. `clip`): a titled group of fields. */
+/**
+ * Nested object (e.g. `clip`): a titled group of fields. An object named
+ * `advanced` (fine-tuning, e.g. trip albums) is collapsed by default.
+ */
 @Component({
   selector: 'app-formly-object',
   imports: [FormlyModule],
   template: `
-    <fieldset class="group">
-      @if (props.label) {
-        <legend>{{ props.label }}</legend>
-      }
-      @if (props.description) {
-        <p class="hint">{{ props.description }}</p>
-      }
-      @for (f of field.fieldGroup; track $index) {
-        <formly-field [field]="f" />
-      }
-    </fieldset>
+    @if (field.key === 'advanced') {
+      <details class="group" data-testid="params-advanced">
+        <summary>{{ props.label || 'Advanced' }}</summary>
+        @if (props.description) {
+          <p class="hint">{{ props.description }}</p>
+        }
+        @for (f of field.fieldGroup; track $index) {
+          <formly-field [field]="f" />
+        }
+      </details>
+    } @else {
+      <fieldset class="group">
+        @if (props.label) {
+          <legend>{{ props.label }}</legend>
+        }
+        @if (props.description) {
+          <p class="hint">{{ props.description }}</p>
+        }
+        @for (f of field.fieldGroup; track $index) {
+          <formly-field [field]="f" />
+        }
+      </fieldset>
+    }
   `,
   styles: `
     .group {
@@ -115,9 +130,17 @@ export class ToggleType extends FieldType<FieldTypeConfig> {}
       padding: 8px 16px;
       margin: 8px 0 16px;
     }
-    legend {
+    legend,
+    summary {
       font: var(--mat-sys-title-small);
       padding: 0 4px;
+    }
+    summary {
+      cursor: pointer;
+      padding: 4px;
+    }
+    details[open] > summary {
+      margin-bottom: 12px;
     }
     .hint {
       color: var(--mat-sys-on-surface-variant);

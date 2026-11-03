@@ -17,14 +17,16 @@
     >
       Run now
     </button>
-    <button
-      matButton
-      [disabled]="busy() || starting() || form.dirty || job()?.syncMode === 'dry-run'"
-      matTooltip="Scan the whole library instead of only assets changed since the last run"
-      (click)="start(false, true)"
-    >
-      Full rescan
-    </button>
+    @if (!groupJob()) {
+      <button
+        matButton
+        [disabled]="busy() || starting() || form.dirty || job()?.syncMode === 'dry-run'"
+        matTooltip="Scan the whole library instead of only assets changed since the last run"
+        (click)="start(false, true)"
+      >
+        Full rescan
+      </button>
+    }
   }
 </div>
 
@@ -63,17 +65,19 @@
           </mat-form-field>
 
           <div class="row">
-            <mat-form-field>
-              <mat-label>Target album</mat-label>
-              <input matInput formControlName="targetAlbumName" data-testid="target-album" />
-              <mat-hint>Created in Immich if it does not exist</mat-hint>
-              @if (form.controls.targetAlbumName.hasError('required')) {
-                <mat-error>Required</mat-error>
-              }
-              @if (serverError('targetAlbumName'); as e) {
-                <mat-error>{{ e }}</mat-error>
-              }
-            </mat-form-field>
+            @if (!groupJob()) {
+              <mat-form-field>
+                <mat-label>Target album</mat-label>
+                <input matInput formControlName="targetAlbumName" data-testid="target-album" />
+                <mat-hint>Created in Immich if it does not exist</mat-hint>
+                @if (form.controls.targetAlbumName.hasError('required')) {
+                  <mat-error>Required</mat-error>
+                }
+                @if (serverError('targetAlbumName'); as e) {
+                  <mat-error>{{ e }}</mat-error>
+                }
+              </mat-form-field>
+            }
             <mat-form-field>
               <mat-label>Exclusion album</mat-label>
               <input
@@ -81,7 +85,11 @@
                 formControlName="exclusionAlbumName"
                 [placeholder]="exclusionPlaceholder()"
               />
-              <mat-hint>Move false positives here to keep them out</mat-hint>
+              <mat-hint>{{
+                groupJob()
+                  ? 'Move photos here to keep them out of every album of this job'
+                  : 'Move false positives here to keep them out'
+              }}</mat-hint>
               @if (serverError('exclusionAlbumName'); as e) {
                 <mat-error>{{ e }}</mat-error>
               }
@@ -156,6 +164,9 @@
 
     @if (!isNew()) {
       <aside>
+        @if (groupJob() && job(); as j) {
+          <app-trips-panel [jobId]="j.id" />
+        }
         <mat-card appearance="outlined">
           <mat-card-header><mat-card-title>Recent runs</mat-card-title></mat-card-header>
           <mat-card-content>

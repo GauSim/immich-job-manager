@@ -22,6 +22,7 @@ import { runEvents } from '../../core/run-events';
 import { duration, parseServerDate } from '../../shared/format';
 import { StatusChip } from '../../shared/status-chip';
 import { ReviewGrid } from '../review-grid/review-grid';
+import { TripReview } from '../trip-review/trip-review';
 
 /** Factory for EventSource; replaceable in tests. */
 export const eventSourceFactory = { create: (url: string) => new EventSource(url) };
@@ -36,6 +37,7 @@ export const eventSourceFactory = { create: (url: string) => new EventSource(url
     MatProgressBarModule,
     StatusChip,
     ReviewGrid,
+    TripReview,
   ],
   templateUrl: './run-detail.html',
   styleUrl: './run-detail.scss',
@@ -53,6 +55,8 @@ export class RunDetail {
   protected readonly acting = signal(false);
   protected readonly now = signal(Date.now());
   protected readonly active = computed(() => !!this.run() && isActive(this.run()!.status));
+  /** Group jobs (trip albums) review trips instead of single candidates. */
+  protected readonly groupJob = computed(() => this.job()?.typeKind === 'groups');
   protected readonly elapsed = computed(() => {
     const r = this.run();
     return r ? duration(r.startedAt, r.finishedAt, this.now()) : '';

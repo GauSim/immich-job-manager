@@ -10,8 +10,12 @@ export const TERMINAL_STATUSES: readonly RunStatus[] = [
 ];
 export const isActive = (s: RunStatus) => s === 'queued' || s === 'running';
 
+export type JobKind = 'assets' | 'groups';
+
 export interface JobType {
   id: string;
+  /** `groups`: one album per group (e.g. trip albums), no target album. */
+  kind: JobKind;
   name: string;
   description?: string;
   version: number;
@@ -66,6 +70,7 @@ export interface Job {
   id: string;
   name: string;
   typeId: string;
+  typeKind: JobKind;
   typeVersion: number;
   params: Record<string, unknown>;
   targetAlbumName: string;
@@ -84,7 +89,8 @@ export interface Job {
 export interface JobInput {
   name: string;
   typeId?: string;
-  targetAlbumName: string;
+  /** Asset jobs only; group jobs create one album per group. */
+  targetAlbumName?: string;
   exclusionAlbumName: string | null;
   params: Record<string, unknown>;
   syncMode: SyncMode;
@@ -121,6 +127,8 @@ export interface CandidateFilter {
   minScore?: number;
   maxScore?: number;
   selected?: boolean;
+  /** Group jobs: only the assets of this proposed group. */
+  group?: string;
 }
 
 export interface Health {
@@ -179,4 +187,104 @@ export interface ImportResult {
   created: string[];
   skipped: string[];
   failed: { index: number; name?: string; errors: FieldError[] }[];
+}
+
+// ---------------------------------------------------------------- group jobs (trip albums)
+
+export type GroupAction = 'create' | 'update' | 'ignored' | 'locked' | 'orphaned' | 'merged';
+export type GroupStatus = 'active' | 'ongoing' | 'ignored' | 'orphaned' | 'merged' | 'locked';
+
+/** Trip albums summary values (other group types may add their own). */
+export interface GroupSummary {
+  countries?: string[];
+  cities?: string[];
+  days?: number;
+  /** Local wall-clock times, ISO without zone. */
+  localStart?: string;
+  localEnd?: string;
+  startRule?: string;
+  endRule?: string;
+  /** `create`: proposed existing album to adopt. */
+  adoptAlbumId?: string;
+  adoptAlbumName?: string;
+  /** `merged`: the group that took over. */
+  mergedIntoName?: string;
+  [key: string]: unknown;
+}
+
+/** A proposed group of a dry run (`GET /runs/:id/groups`). */
+export interface RunGroup {
+  key: string;
+  action: GroupAction;
+  jobGroupId: string | null;
+  /** Album of the matched group, or the adopted album for `create`. */
+  albumId: string | null;
+  name: string;
+  start: string;
+  end: string;
+  coreStart: string;
+  coreEnd: string;
+  ongoing: boolean;
+  summary: GroupSummary;
+  assetCount: number;
+  selected: boolean;
+}
+
+export interface RunGroupsResponse {
+  items: RunGroup[];
+  summary: Record<GroupAction, number> & { selected: number };
+}
+
+/** A stored group of a job (`GET /jobs/:id/groups`). */
+export interface JobGroup {
+  id: string;
+  key: string;
+  status: GroupStatus;
+  name: string;
+  albumId: string | null;
+  nameLocked: boolean;
+  adopted: boolean;
+  start: string;
+  end: string;
+  coreStart: string;
+  coreEnd: string;
+  summary: GroupSummary;
+  assetCount: number;
+  excludedCount: number;
+}
+
+export interface GroupApplyPreview {
+  kind: 'groups';
+  selected: number;
+  create: number;
+  adopt: number;
+  update: number;
+  ignore: number;
+  assets: number;
+}
+
+export interface GroupSyncResult {
+  created: number;
+  adopted: number;
+  updated: number;
+  renamed: number;
+  ignored: number;
+  orphaned: number;
+  merged: number;
+  added: number;
+  removed: number;
+  removedByHand: number;
+  addedByHand: number;
+  failed: number;
+}
+
+export interface GroupApplyResult {
+  kind: 'groups';
+  result: GroupSyncResult;
+  summary: string;
+}
+
+/** Trip albums insights: inferred home per month. */
+export interface TripInsights {
+  home: { from: string; to: string; country: string | null; place: string | null }[];
 }
