@@ -41,7 +41,7 @@ With Docker Compose, set `SPIKE_SCRIPT=trips` in `spike.env`.
 
 | Output | Content | Commit? |
 | --- | --- | --- |
-| `out/trips-stats.json` | Anonymised counts only: GPS, place and time-zone coverage per owner / type / device class; days with and without GPS; country distribution without names; partner assets in search results; album date fields. | Yes, copy to `docs/spike-out/` |
+| `out/trips-stats.json` | Anonymised counts only: GPS, place and time-zone coverage per owner / type / device class; days with and without GPS; country distribution without names; partner assets in search results; album date fields. | No need; summarise findings in `docs/immich-api-notes.md` §10 |
 | `out/trips-index.json` | Raw per-asset index (times, GPS, places, file names) for the T2 tuning CLI. | **Never.** It is your travel history. `out/` is git-ignored. |
 
 `TRIPS_PARTNER_ADD_TEST=1` adds one timeline and one archived partner asset to the spike album and removes them again, recording the per-id `success` / `error`.
@@ -63,5 +63,5 @@ Start the instance with Immich's official `docker-compose.yml` and `example.env`
 `anonymise-metadata.py` turns a spike report into the scorer fixture used by the backend tests (file-name patterns, MIME, dimensions, camera EXIF and description only — no dates, GPS or places):
 
 ```bash
-python3 anonymise-metadata.py ../../docs/spike-out/spike-report.json ../../backend/test/fixtures/real-library-sample.json
+python3 anonymise-metadata.py out/spike-report.json ../../backend/test/fixtures/real-library-sample.json
 ```

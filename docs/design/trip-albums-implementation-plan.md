@@ -40,7 +40,7 @@ T1 and T2 can run in parallel: T2 starts on synthetic timelines and switches to 
 
 **Goal:** answer the SDD open questions that can change the design before writing it.
 
-**Status:** in progress (2026-11-03) – API questions answered from the Immich v3.3.5 server source; pending: `npm run trips` on the real instance
+**Status:** done (2026-11-03) – API questions answered from the Immich v3.3.5 server source; real-library numbers from `npm run trips` on the real instance (32,029 assets)
 
 - Note: a throwaway Immich could not be started in the development sandbox: the network policy blocks `pkg-containers.githubusercontent.com`, so the GHCR images can't be pulled. API behaviour was therefore read from the Immich **v3.3.5 server source** (tag `v3.3.5`) instead of observed. The `trips` script was smoke-tested against a local fake Immich. Real-library numbers come from running it on the NAS.
 
@@ -56,18 +56,18 @@ Tasks:
     - Note: from source: `timeZone` comes from EXIF offsets, else GPS (`geoTz`); when `null`, `fileCreatedAt` = wall clock read as UTC (API notes §10.3). The script reports the `timeZone`-null share and the local − instant offsets per device class. SDD §5.5 refined (local-time match when `timeZone` is null).
   - [x] Does `GET /albums` expose `updatedAt` / `startDate` / `endDate` usable for the adoption pre-filter?
     - Note: yes for non-empty albums, plus `lastModifiedAssetTimestamp` (API notes §10.5). SDD §7.4 updated. Renaming needs `album.update`.
-- [ ] Export an **anonymised stats report** over the real library (committed) and a **raw index export** (local only, gitignored): GPS share per device class (phone / camera / no camera / screenshot), `country` coverage when GPS is set, `timeZone` coverage.
-  - Note: the tool is done (`out/trips-stats.json` and `out/trips-index.json`, format version 1 for the T2 CLI). Pending: run on the NAS and copy the stats to `docs/spike-out/trips-stats.json`.
+- [x] Export an **anonymised stats report** over the real library (committed) and a **raw index export** (local only, gitignored): GPS share per device class (phone / camera / no camera / screenshot), `country` coverage when GPS is set, `timeZone` coverage.
+  - Note: the tool is done (`out/trips-stats.json` and `out/trips-index.json`, format version 1 for the T2 CLI). Run on the real instance 2026-11-03. The stats file is not committed (`docs/spike-out/` was removed on purpose); the numbers and their consequences are in API notes §10.6. The raw export stays local.
 - [x] If partner assets are returned today, open a follow-up for the screenshot job (SDD open question 6).
   - Note: confirmed from source: `metadataSource` adds partner screenshots when a partner shares with "show in timeline". Decided (2026-11-03) to accept this for now; no follow-up issue.
 - [x] Record findings in `docs/immich-api-notes.md` (new section "Trips") and update the SDD where they differ.
   - Note: API notes §10. SDD §1.3, §2, §5.5, §5.6, §7.4 and §12 updated. New key permissions for the job: `user.read`, `album.update` (API notes §10.7).
 
-- [ ] **Deliverables:** spike mode, notes, anonymised stats, local raw export.
-  - Note: spike mode and notes ✓; stats and export pending the real run.
+- [x] **Deliverables:** spike mode, notes, anonymised stats, local raw export.
+  - Note: stats summarised in the notes instead of committed as a file.
 
-- [ ] **Done when:** SDD open questions 1, 2, 3 and 6 have answers in the notes; `partnerAssets` is either confirmed or removed from the design.
-  - Note: 1, 2 (in principle) and 6 answered; `partnerAssets` confirmed (timeline assets only). 3 and the numbers for 2 are pending the real run.
+- [x] **Done when:** SDD open questions 1, 2, 3 and 6 have answers in the notes; `partnerAssets` is either confirmed or removed from the design.
+  - Note: all answered. `partnerAssets` confirmed from source (timeline assets only), but the real library has no partners, so the album-add test could not run there. Partner support and adoption (no hand-made albums in this library) move to low priority.
 
 ---
 
@@ -84,6 +84,7 @@ Tasks:
 - [ ] `AssetIndexService` (`src/index/`):
   - [ ] `refresh(scope, { since?, resumeFrom?, signal })` yields pages with cursors; each page is upserted in one `SqliteService.transaction()`.
   - [ ] Full refresh deletes rows not seen in this refresh.
+  - Note (T0): a full walk of the real library (32k assets) takes ~8 s. Start with a **full refresh on every run**; add the incremental refresh only if a larger library needs it (API notes §10.6).
   - [ ] `forget(assetIds)` for ids Immich refused (deleted assets).
 - [ ] `AssetIndexReader`: ordered iteration by `taken_at` (all rows in memory as compact objects), `between(start, end)`.
 - [ ] Mapping helpers: `has_camera` (null/`""` = empty, API notes §4.2), `is_screenshot`.

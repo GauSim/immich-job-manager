@@ -481,8 +481,8 @@ Only trips whose proposed asset set or range changed are "touched" and read back
 | # | Question | Resolved by |
 | --- | --- | --- |
 | 1 | Does `/search/metadata` return partner assets, and can our key add them to our album? | **Answered (T0):** yes, for partners sharing with "show in timeline" (incl. their archived assets); timeline assets can be added, archived ones cannot. API notes §10.1–10.2. Confirm on the real instance with `TRIPS_PARTNER_ADD_TEST=1`. |
-| 2 | Is `fileCreatedAt` a reliable instant for phone and camera photos; how often is `timeZone` missing? | **Answered (T0) in principle:** reliable when `timeZone` is set (EXIF offset or GPS); wall clock read as UTC when it is `null` (API notes §10.3). Share of `null` per device class: pending the real `npm run trips`. |
-| 3 | GPS coverage of the real library per device (phone vs camera vs messenger). This decides how much the fill matters. | Pending: `npm run trips` on the real instance (API notes §10.6). |
+| 2 | Is `fileCreatedAt` a reliable instant for phone and camera photos; how often is `timeZone` missing? | **Answered (T0) in principle:** reliable when `timeZone` is set (EXIF offset or GPS); wall clock read as UTC when it is `null` (API notes §10.3). On the real library: 85 % of camera images and 5 % of phone images have `null` (API notes §10.6). |
+| 3 | GPS coverage of the real library per device (phone vs camera vs messenger). This decides how much the fill matters. | **Answered (T0):** phone 92–97 %, camera images 9 %, no-EXIF images 3 %; 72 % of days have GPS; almost none before 2011 (API notes §10.6). |
 | 4 | Is the ~1 km home cell stable enough, or are several home cells needed (work, parents)? | T2 tuning on real data |
 | 5 | Should `adoptExisting` also look at shared albums (owned by others)? Default: no. | Review |
 | 6 | Should the screenshot job exclude partner assets explicitly? | **Answered (T0):** it currently adds partner screenshots when a partner shares with "show in timeline". Accepted for now (2026-11-03); no change to the screenshot job. |
