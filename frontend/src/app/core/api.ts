@@ -1,9 +1,13 @@
 import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
-import { SILENT_ERRORS } from './error.interceptor';
+import { SILENT_ERRORS } from './http-context';
 import type {
   ApplyPreview,
+  AuthSession,
+  ImportResult,
+  SettingKey,
+  SettingsView,
   ApplyResult,
   Candidate,
   CandidateFilter,
@@ -38,6 +42,40 @@ export class Api {
     return this.http.get<Health>('/api/health', {
       context: new HttpContext().set(SILENT_ERRORS, silent),
     });
+  }
+
+  session(): Observable<AuthSession> {
+    return this.http.get<AuthSession>('/api/auth/session', {
+      context: new HttpContext().set(SILENT_ERRORS, true),
+    });
+  }
+
+  login(password: string): Observable<void> {
+    return this.http.post<void>(
+      '/api/auth/login',
+      { password },
+      { context: new HttpContext().set(SILENT_ERRORS, true) },
+    );
+  }
+
+  logout(): Observable<void> {
+    return this.http.post<void>('/api/auth/logout', {});
+  }
+
+  settings(): Observable<SettingsView> {
+    return this.http.get<SettingsView>('/api/settings');
+  }
+
+  updateSettings(patch: Partial<Record<SettingKey, number>>): Observable<SettingsView> {
+    return this.http.patch<SettingsView>('/api/settings', patch);
+  }
+
+  exportJobs(): Observable<unknown> {
+    return this.http.get<unknown>('/api/jobs/export');
+  }
+
+  importJobs(body: unknown): Observable<ImportResult> {
+    return this.http.post<ImportResult>('/api/jobs/import', body);
   }
 
   jobTypes(): Observable<JobType[]> {

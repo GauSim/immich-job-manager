@@ -1,0 +1,115 @@
+<div class="page-header"><h1>Settings</h1></div>
+<div class="card-grid">
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Immich connection</mat-card-title>
+      <mat-card-subtitle
+        >URL and API key come from the environment (.env / Docker secrets)</mat-card-subtitle
+      >
+    </mat-card-header>
+    <mat-card-content>
+      <dl>
+        <dt>Status</dt>
+        <dd data-testid="settings-immich">{{ immichStatus() }}</dd>
+        @if (view(); as v) {
+          <dt>Immich URL</dt>
+          <dd>
+            <code>{{ v.app.immichUrl }}</code>
+          </dd>
+        }
+        <dt>Database</dt>
+        <dd>{{ health()?.database?.status ?? '–' }}</dd>
+        @if (health()?.immich?.error; as e) {
+          <dt>Error</dt>
+          <dd class="error-text">{{ e }}</dd>
+        }
+      </dl>
+    </mat-card-content>
+    <mat-card-actions>
+      <button matButton (click)="store.refresh()">
+        <mat-icon>refresh</mat-icon>Test connection
+      </button>
+    </mat-card-actions>
+  </mat-card>
+
+  <mat-card appearance="outlined">
+    <mat-card-header><mat-card-title>Retention and defaults</mat-card-title></mat-card-header>
+    <mat-card-content>
+      <form [formGroup]="form" (ngSubmit)="save()" class="fields">
+        <mat-form-field>
+          <mat-label>Dry runs with candidates per job</mat-label>
+          <input matInput type="number" formControlName="retention.dryRunCandidates" />
+          <mat-hint>Older dry runs keep their totals; candidates are pruned nightly</mat-hint>
+          @if (error('retention.dryRunCandidates'); as e) {
+            <mat-error>{{ e }}</mat-error>
+          }
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>Keep run logs (days)</mat-label>
+          <input matInput type="number" formControlName="retention.logDays" />
+          @if (error('retention.logDays'); as e) {
+            <mat-error>{{ e }}</mat-error>
+          }
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>Default threshold for new jobs</mat-label>
+          <input matInput type="number" step="0.05" formControlName="defaults.threshold" />
+          @if (error('defaults.threshold'); as e) {
+            <mat-error>{{ e }}</mat-error>
+          }
+        </mat-form-field>
+        <div>
+          <button
+            matButton="filled"
+            type="submit"
+            [disabled]="saving() || form.pristine"
+            data-testid="save-settings"
+          >
+            Save
+          </button>
+        </div>
+      </form>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Jobs backup</mat-card-title>
+      <mat-card-subtitle>Job definitions as JSON (no run history)</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-actions>
+      <button matButton (click)="exportJobs()" data-testid="export">
+        <mat-icon>download</mat-icon>Export
+      </button>
+      <button matButton (click)="file.click()"><mat-icon>upload</mat-icon>Import…</button>
+      <input
+        #file
+        type="file"
+        accept="application/json,.json"
+        hidden
+        (change)="importJobs($event)"
+        data-testid="import-file"
+      />
+    </mat-card-actions>
+  </mat-card>
+
+  @if (view(); as v) {
+    <mat-card appearance="outlined">
+      <mat-card-header><mat-card-title>About</mat-card-title></mat-card-header>
+      <mat-card-content>
+        <dl>
+          <dt>Version</dt>
+          <dd data-testid="app-version">{{ v.app.version }}</dd>
+          <dt>Sign-in</dt>
+          <dd>
+            {{ v.app.authMode === 'password' ? 'App password' : 'Reverse proxy (forward auth)' }}
+          </dd>
+          <dt>Time zone</dt>
+          <dd>{{ v.app.timeZone }}</dd>
+          <dt>Concurrent runs / file reads</dt>
+          <dd>{{ v.app.maxConcurrentRuns }} / {{ v.app.maxFileReads }}</dd>
+        </dl>
+      </mat-card-content>
+    </mat-card>
+  }
+</div>

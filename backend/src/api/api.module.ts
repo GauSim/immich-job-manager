@@ -8,6 +8,7 @@ import { JobsController, JobTypesController } from './jobs.controller.js';
 import { JobsService } from './jobs.service.js';
 import { RunsController } from './runs.controller.js';
 import { RunsService } from './runs.service.js';
+import { SettingsController } from './settings.controller.js';
 
 @Module({
   imports: [RunnerModule, SchedulerModule],
@@ -16,6 +17,7 @@ import { RunsService } from './runs.service.js';
     JobsController,
     RunsController,
     AssetsController,
+    SettingsController,
   ],
   providers: [JobsService, RunsService, CandidatesService, ApplyService],
 })

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { DynamicModule, Logger, Module } from '@nestjs/common';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ApiModule } from './api/api.module.js';
+import { AuthModule } from './auth/auth.module.js';
 import { ConfigModule } from './config/config.module.js';
 import type { AppConfig } from './config/config.schema.js';
 import { EventsModule } from './events/events.module.js';
@@ -31,6 +32,7 @@ export class AppModule {
         SyncModule,
         FeaturesModule,
         SettingsModule,
+        AuthModule,
         HealthModule,
         ApiModule,
         ...staticFiles(config.publicDir),

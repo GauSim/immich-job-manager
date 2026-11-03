@@ -125,8 +125,10 @@ export interface CandidateFilter {
 
 export interface Health {
   status: 'ok' | 'degraded' | 'error';
-  database: { status: 'up' | 'down'; error?: string };
-  immich: {
+  version?: string;
+  /** Only with a session (or in forward-auth mode). */
+  database?: { status: 'up' | 'down'; error?: string };
+  immich?: {
     status: 'up' | 'down' | 'incompatible';
     version?: string;
     error?: string;
@@ -152,4 +154,29 @@ export type RunEvent =
 export interface FieldError {
   path: (string | number)[];
   message: string;
+}
+
+export interface AuthSession {
+  mode: 'password' | 'forward-auth';
+  authenticated: boolean;
+}
+
+export type SettingKey = 'retention.dryRunCandidates' | 'retention.logDays' | 'defaults.threshold';
+
+export interface SettingsView {
+  settings: Record<SettingKey, number>;
+  app: {
+    version: string;
+    authMode: 'password' | 'forward-auth';
+    timeZone: string;
+    maxConcurrentRuns: number;
+    maxFileReads: number;
+    immichUrl: string;
+  };
+}
+
+export interface ImportResult {
+  created: string[];
+  skipped: string[];
+  failed: { index: number; name?: string; errors: FieldError[] }[];
 }

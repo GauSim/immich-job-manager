@@ -14,8 +14,12 @@ import {
 
 export { defaultExclusionAlbumName };
 import { JobEntity, JobRunEntity } from '../persistence/entities/index.js';
-import type { CreateJobDto, UpdateJobDto } from './dto.js';
-import { ValidationFailedException, zodErrors } from './validation.js';
+import { CreateJobDto, type UpdateJobDto } from './dto.js';
+import {
+  ValidationFailedException,
+  zodErrors,
+  type FieldError,
+} from './validation.js';
 
 export const ACTIVE_STATUSES = ['queued', 'running'] as const;
 
@@ -119,6 +123,66 @@ export class JobsService {
     return this.get(id);
   }
 
+  async exportAll(): Promise<{
+    app: 'immich-album-jobs';
+    version: 1;
+    exportedAt: string;
+    jobs: ExportedJob[];
+  }> {
+    const jobs = await this.jobs.find({ order: { name: 'ASC' } });
+    return {
+      app: 'immich-album-jobs',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      jobs: jobs.map((j) => ({
+        name: j.name,
+        typeId: j.typeId,
+        params: j.params,
+        targetAlbumName: j.targetAlbumName,
+        exclusionAlbumName: j.exclusionAlbumName,
+        syncMode: j.syncMode,
+        schedule: j.schedule,
+        enabled: j.enabled,
+      })),
+    };
+  }
+
+  /** Creates the given jobs (validated like `POST /jobs`); existing names are skipped. */
+  async importAll(items: unknown[]): Promise<ImportResult> {
+    const result: ImportResult = { created: [], skipped: [], failed: [] };
+    const existing = new Set(
+      (await this.jobs.find()).map((j) => j.name.toLowerCase()),
+    );
+    for (const [index, item] of items.entries()) {
+      const name = (item as { name?: unknown } | null)?.name;
+      const parsed = CreateJobDto.safeParse(item);
+      if (!parsed.success) {
+        result.failed.push({
+          index,
+          name: typeof name === 'string' ? name : undefined,
+          errors: zodErrors(parsed.error),
+        });
+        continue;
+      }
+      if (existing.has(parsed.data.name.toLowerCase())) {
+        result.skipped.push(parsed.data.name);
+        continue;
+      }
+      try {
+        await this.create(parsed.data);
+        existing.add(parsed.data.name.toLowerCase());
+        result.created.push(parsed.data.name);
+      } catch (e) {
+        const errors =
+          e instanceof ValidationFailedException
+            ? (e.getResponse() as { errors: FieldError[] }).errors
+            : [{ path: [], message: (e as Error).message }];
+        result.failed.push({ index, name: parsed.data.name, errors });
+      }
+    }
+    return result;
+  }
+
   /** Deletes the job and its run history. Never touches Immich albums. */
   async delete(id: string): Promise<void> {
     await this.getEntity(id);
@@ -190,4 +254,23 @@ function assertScheduleUsable(enabled: boolean, schedule: string | null): void {
       },
     ]);
   }
+}
+
+/** Portable job definition (export/import): no ids, albums by name. */
+export interface ExportedJob {
+  name: string;
+  typeId: string;
+  params: Record<string, unknown>;
+  targetAlbumName: string;
+  exclusionAlbumName: string | null;
+  syncMode: JobEntity['syncMode'];
+  schedule: string | null;
+  enabled: boolean;
+}
+
+export interface ImportResult {
+  created: string[];
+  /** Skipped because a job with the same name exists. */
+  skipped: string[];
+  failed: { index: number; name?: string; errors: FieldError[] }[];
 }

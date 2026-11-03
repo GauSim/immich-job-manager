@@ -51,6 +51,7 @@ describe('Album sync (e2e)', () => {
       IMMICH_URL: immich.url,
       IMMICH_API_KEY: 'k',
       APP_PASSWORD: 'p',
+      AUTH_MODE: 'forward-auth', // auth is covered by auth.e2e-spec
       DATA_DIR: dataDir,
       NODE_ENV: 'production',
       LOG_LEVEL: 'fatal',

@@ -11,7 +11,7 @@ npm run test:e2e      # e2e tests (supertest)
 npm run build
 ```
 
-Configuration: see the root README. `.env` in this directory is loaded automatically in development.
+Configuration: see the root README. For local development without logging in, set `AUTH_MODE=forward-auth` in `backend/.env`. `.env` in this directory is loaded automatically in development.
 
 ## Contract tests (real Immich)
 

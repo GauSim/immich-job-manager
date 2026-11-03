@@ -3,6 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { App } from './app';
+import { AuthStore } from './core/auth.store';
 
 describe('App shell', () => {
   beforeEach(async () => {
@@ -12,7 +13,15 @@ describe('App shell', () => {
     }).compileComponents();
   });
 
-  it('renders the toolbar with navigation and Immich status', async () => {
+  it('hides navigation until signed in', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    TestBed.inject(HttpTestingController).expectOne('/api/health').flush({ status: 'ok' });
+    expect((fixture.nativeElement as HTMLElement).querySelector('nav')).toBeNull();
+  });
+
+  it('renders the toolbar with navigation, Immich status and sign-out', async () => {
+    TestBed.inject(AuthStore).session.set({ mode: 'password', authenticated: true });
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
@@ -34,6 +43,7 @@ describe('App shell', () => {
   });
 
   it('shows Immich problems from the health endpoint', async () => {
+    TestBed.inject(AuthStore).session.set({ mode: 'forward-auth', authenticated: true });
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
     TestBed.inject(HttpTestingController)

@@ -59,7 +59,7 @@ Before committing, run lint, format check, typecheck, tests and build for every 
 - Album writes go through `AlbumSyncService` (`src/sync/`); only assets recorded in `job_asset` (owned) may ever be removed. Dry runs must never change Immich.
 - Config comes from the injected `APP_CONFIG` (`AppConfig`), never `process.env` outside `config/` and `main.ts`.
 - Immich v3.x only; `@immich/sdk` pinned to the server's version.
-- All HTTP routes under `/api`.
+- All HTTP routes under `/api`; every route needs a session unless marked `@Public()` (`src/auth/`). Tests that are not about auth boot with `AUTH_MODE=forward-auth`.
 - No secrets in the repo, DB or browser; secrets come from `*_FILE` env vars / Docker secrets.
 - New config → `.env.example` and README.
 - Frontend: standalone components + signals, lazy routes; job params UI is generated from the job type's JSON Schema (never hand-write per-type forms). Formly is provided on the job-editor routes only (keeps the initial bundle small). Use `data-testid` for elements the Playwright tests use.

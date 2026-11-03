@@ -1,6 +1,9 @@
-import { Controller, Get, HttpStatus, Res } from '@nestjs/common';
+import { Controller, Get, HttpStatus, Req, Res } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
+import { Public } from '../auth/auth.guard.js';
+import { AuthService } from '../auth/auth.service.js';
+import { APP_VERSION } from '../version.js';
 import { DataSource } from 'typeorm';
 import { ImmichClient, SUPPORTED_MAJOR } from '../immich/immich.client.js';
 import { ImmichError } from '../immich/immich.errors.js';
@@ -8,6 +11,8 @@ import { ImmichError } from '../immich/immich.errors.js';
 export interface HealthResponse {
   /** ok: everything up · degraded: app works, Immich down/incompatible · error: database down */
   status: 'ok' | 'degraded' | 'error';
+  /** App version. */
+  version: string;
   database: { status: 'up' | 'down'; error?: string };
   immich: {
     status: 'up' | 'down' | 'incompatible';
@@ -26,12 +31,16 @@ export class HealthController {
   constructor(
     @InjectDataSource() private readonly db: DataSource,
     private readonly immich: ImmichClient,
+    private readonly auth: AuthService,
   ) {}
 
+  /** Public (Docker healthcheck); details only with a session or in forward-auth mode. */
+  @Public()
   @Get()
   async getHealth(
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<HealthResponse> {
+  ): Promise<HealthResponse | Pick<HealthResponse, 'status' | 'version'>> {
     const [database, immich] = await Promise.all([
       this.checkDatabase(),
       this.checkImmich(),
@@ -45,7 +54,9 @@ export class HealthController {
     res.status(
       status === 'error' ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.OK,
     );
-    return { status, database, immich };
+    if (!this.auth.isAuthenticated(req))
+      return { status, version: APP_VERSION };
+    return { status, version: APP_VERSION, database, immich };
   }
 
   private async checkDatabase(): Promise<HealthResponse['database']> {

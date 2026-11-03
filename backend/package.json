@@ -1,6 +1,6 @@
 {
   "name": "immich-album-jobs-backend",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "Immich Album Jobs – NestJS backend",
   "author": "",
   "private": true,

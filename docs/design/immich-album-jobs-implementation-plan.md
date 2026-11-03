@@ -338,20 +338,27 @@ Tasks:
 
 **Goal:** a stable v1.0 you can leave running. **Release v1.0.**
 
-**Status:** not started
+**Status:** done (2026-11-03) – version 1.0.0; pending: push the `v1.0.0` tag (publishes the image)
 
 Tasks:
 
-- [ ] `AuthModule`: password login with session cookie (`httpOnly`, `SameSite=Strict`), `AUTH_MODE=forward-auth` to disable.
-- [ ] Settings page: connection test, Immich version, retention, defaults; export/import jobs as JSON (`/jobs/export`, `/jobs/import`).
-- [ ] Thumbnail proxy restriction verified; container runs as `node`, read-only root filesystem tested.
-- [ ] Final Dockerfile and `docker-compose.yml`, `.env.example`, healthcheck.
-- [ ] README: setup, API key creation and permissions, network name check, backup (`sqlite3 app.db ".backup ..."`), upgrade.
+- [x] `AuthModule`: password login with session cookie (`httpOnly`, `SameSite=Strict`), `AUTH_MODE=forward-auth` to disable.
+  - Note: stateless signed session cookie (30 days, `Secure` behind HTTPS); the signing key is derived from `APP_PASSWORD` (HKDF), so nothing secret is stored and a password change signs everyone out. Global guard on `/api` except `/health` and `/auth/*`; `/health` only returns `status`/`version` without a session. Failed logins per client are limited (10 per 15 min → 429). UI: login page, route guard, 401 → login, sign-out button.
+- [x] Settings page: connection test, Immich version, retention, defaults; export/import jobs as JSON (`/jobs/export`, `/jobs/import`).
+  - Note: `GET/PATCH /settings` (retention `retention.dryRunCandidates` / `retention.logDays`, `defaults.threshold` used for new jobs) plus read-only app facts (version, auth mode, TZ, limits, Immich URL). Import validates each job like `POST /jobs`, skips existing names and reports invalid entries; imported schedules are registered.
+- [x] Thumbnail proxy restriction verified; container runs as `node`, read-only root filesystem tested.
+  - Note: proxy guard covered by e2e (unknown asset → 404, Immich not asked; needs a session). CI smoke test runs the image with `--read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges`, signs in and writes a job.
+- [x] Final Dockerfile and `docker-compose.yml`, `.env.example`, healthcheck.
+  - Note: OCI labels, `VOLUME /data`, healthcheck intervals; compose: `read_only`, `tmpfs /tmp`, `init`, `cap_drop: ALL`, `no-new-privileges`, image `ghcr.io/gausim/immich-job-manager` with `build: .` fallback, `IMMICH_NETWORK` / `IMMICH_ALBUM_JOBS_VERSION` variables.
+- [x] README: setup, API key creation and permissions, network name check, backup (`sqlite3 app.db ".backup ..."`), upgrade.
+  - Note: rewritten around a 6-step setup, first album walkthrough, sign-in modes, backup/upgrade, hardening, configuration and API reference.
 - [ ] Tag image `v1.0.0`.
+  - Note: versions are 1.0.0 and `.github/workflows/release.yml` builds and pushes `ghcr.io/gausim/immich-job-manager:{1.0.0,1.0,latest}` (amd64 + arm64) on a `v*` tag; pushing the tag is left to the maintainer.
 
-- [ ] **Deliverables:** documented, password-protected v1.0 image.
+- [x] **Deliverables:** documented, password-protected v1.0 image.
 
-- [ ] **Done when:** a fresh setup from the README works end to end in under 15 minutes.
+- [x] **Done when:** a fresh setup from the README works end to end in under 15 minutes.
+  - Note: followed the README in a clean directory against a real (throwaway) Immich v3.3.5: secrets with `600` permissions, hardened container healthy, sign in, "Immich connected", screenshot job, dry run (6 scanned / 5 matched), Apply → album `Screenshots` with 5 assets in Immich, additive + nightly schedule. Scripted UI part ≈ 25 s; with key creation and the image build (~3 min) roughly 10 minutes.
 
 ---
 

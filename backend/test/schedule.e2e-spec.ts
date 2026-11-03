@@ -59,6 +59,7 @@ describe('Scheduler & incremental runs (e2e)', () => {
       IMMICH_URL: immich.url,
       IMMICH_API_KEY: 'k',
       APP_PASSWORD: 'p',
+      AUTH_MODE: 'forward-auth', // auth is covered by auth.e2e-spec
       DATA_DIR: dataDir,
       TZ: 'Europe/Berlin',
       NODE_ENV: 'production',

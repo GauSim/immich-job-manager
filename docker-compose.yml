@@ -1,9 +1,21 @@
+# Immich Album Jobs — see README.md ("Setup").
+#   docker compose pull && docker compose up -d     # released image
+#   docker compose up -d --build                    # or build from this checkout
 services:
   album-jobs:
+    image: ghcr.io/gausim/immich-job-manager:${IMMICH_ALBUM_JOBS_VERSION:-1.0.0}
     build: .
-    image: immich-album-jobs:latest
     container_name: immich_album_jobs
     restart: unless-stopped
+    init: true
+    # Hardening: read-only root filesystem, no privileges; only /data and /tmp are writable.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "3000:3000"
     env_file: .env
@@ -15,7 +27,7 @@ services:
     secrets: [immich_api_key, app_password]
     networks: [immich]
 
-  # later, only with: docker compose --profile ml up -d
+  # Later (phase 9), only with: docker compose --profile ml up -d
   py-worker:
     profiles: ["ml"]
     build: ./worker-py
@@ -29,7 +41,7 @@ services:
 networks:
   immich:
     external: true
-    name: immich_default   # check with: docker network ls
+    name: ${IMMICH_NETWORK:-immich_default}   # check with: docker network ls
 
 secrets:
   immich_api_key:

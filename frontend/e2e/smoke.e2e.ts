@@ -1,4 +1,12 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+/** The stack runs with APP_PASSWORD=e2e. */
+async function signIn(page: Page, path = '/') {
+  await page.goto(path);
+  await expect(page).toHaveURL(/\/login/);
+  await page.getByTestId('password').fill('e2e');
+  await page.getByTestId('login').click();
+}
 
 /** 30 copies of the anonymised real-library sample: 29,970 assets → 2,910 candidates. */
 const EXPECTED_CANDIDATES = 2910;
@@ -8,8 +16,9 @@ test('create a screenshot job, dry-run it and review thousands of candidates', a
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 
-  // Dashboard
-  await page.goto('/');
+  // Sign in, then the dashboard
+  await signIn(page);
+  await expect(page).toHaveURL(/\/jobs$/);
   await expect(page.getByTestId('immich-status')).toContainText('Immich connected');
   await expect(page.getByText('No jobs yet')).toBeVisible();
 
@@ -95,7 +104,8 @@ test('create a screenshot job, dry-run it and review thousands of candidates', a
 
 test('an additive run adds the remaining match to the album', async ({ page }) => {
   // Runs after the first test (serial, shared stack): "Screenshots" holds 2,909 of 2,910.
-  await page.goto('/jobs/new');
+  await signIn(page, '/jobs/new');
+  await expect(page).toHaveURL(/\/jobs\/new$/); // back to where we wanted to go
   await page.getByTestId('job-name').fill('Screenshots nightly');
   await page.getByTestId('target-album').fill('Screenshots');
   await page.getByTestId('sync-mode').click();
@@ -110,11 +120,27 @@ test('an additive run adds the remaining match to the album', async ({ page }) =
 });
 
 test('shows field errors from the server', async ({ page }) => {
-  await page.goto('/jobs/new');
+  await signIn(page, '/jobs/new');
   await page.getByTestId('job-name').fill('Bad schedule');
   await page.getByTestId('target-album').fill('X');
   await page.getByPlaceholder('0 3 * * *').fill('every day');
   await page.getByTestId('save-job').click();
   await expect(page.getByText('must be a valid cron expression')).toBeVisible();
   await expect(page).toHaveURL(/\/jobs\/new$/);
+});
+
+test('sign-in: wrong password, then sign in and out', async ({ page }) => {
+  await page.goto('/settings');
+  await expect(page).toHaveURL(/\/login\?returnUrl=%2Fsettings/);
+  await page.getByTestId('password').fill('nope');
+  await page.getByTestId('login').click();
+  await expect(page.getByText('Wrong password')).toBeVisible();
+  await page.getByTestId('password').fill('e2e');
+  await page.getByTestId('login').click();
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page.getByTestId('app-version')).toHaveText('1.0.0');
+  await page.getByTestId('logout').click();
+  await expect(page).toHaveURL(/\/login/);
+  await page.goto('/jobs');
+  await expect(page).toHaveURL(/\/login/);
 });

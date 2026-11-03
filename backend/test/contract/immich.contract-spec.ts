@@ -133,6 +133,7 @@ describe.skipIf(!url || !key)('Immich v3 contract', () => {
         IMMICH_URL: url,
         IMMICH_API_KEY: key,
         APP_PASSWORD: 'p',
+        AUTH_MODE: 'forward-auth', // auth is covered by auth.e2e-spec
         DATA_DIR: dataDir,
         NODE_ENV: 'production',
         LOG_LEVEL: 'fatal',
