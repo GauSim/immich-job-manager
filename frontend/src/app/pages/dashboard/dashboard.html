@@ -1,0 +1,118 @@
+<div class="page-header">
+  <h1>Jobs</h1>
+  <a matButton="filled" routerLink="/jobs/new"><mat-icon>add</mat-icon>New job</a>
+</div>
+
+<mat-card appearance="outlined" class="immich-card">
+  <mat-card-content class="immich">
+    @if (immich(); as i) {
+      <mat-icon [class]="i.status">{{ i.status === 'up' ? 'cloud_done' : 'cloud_off' }}</mat-icon>
+      <div>
+        <div class="title">
+          @switch (i.status) {
+            @case ('up') {
+              Connected to Immich {{ i.version }}
+            }
+            @case ('incompatible') {
+              Immich {{ i.version }} is not supported
+            }
+            @default {
+              Immich is not reachable
+            }
+          }
+        </div>
+        @if (i.error) {
+          <div class="muted small">{{ i.error }}</div>
+        }
+      </div>
+    } @else {
+      <span class="muted">Checking Immich…</span>
+    }
+  </mat-card-content>
+</mat-card>
+
+@if (loading()) {
+  <mat-progress-bar mode="indeterminate" />
+}
+
+@if (!loading() && jobs().length === 0) {
+  <div class="empty">
+    <mat-icon>auto_awesome_motion</mat-icon>
+    <p>No jobs yet. Create one to find assets and keep them in an album.</p>
+    <a matButton="filled" routerLink="/jobs/new">Create a job</a>
+  </div>
+} @else if (jobs().length > 0) {
+  <div class="table-wrap">
+    <table mat-table [dataSource]="jobs()" class="jobs">
+      <ng-container matColumnDef="name">
+        <th mat-header-cell *matHeaderCellDef>Name</th>
+        <td mat-cell *matCellDef="let job">
+          <a [routerLink]="['/jobs', job.id]" class="job-name">{{ job.name }}</a>
+          <div class="muted small">→ {{ job.targetAlbumName }}</div>
+        </td>
+      </ng-container>
+      <ng-container matColumnDef="type">
+        <th mat-header-cell *matHeaderCellDef>Type</th>
+        <td mat-cell *matCellDef="let job">{{ typeName(job) }}</td>
+      </ng-container>
+      <ng-container matColumnDef="sync">
+        <th mat-header-cell *matHeaderCellDef>Sync mode</th>
+        <td mat-cell *matCellDef="let job">{{ syncLabels[job.syncMode] }}</td>
+      </ng-container>
+      <ng-container matColumnDef="schedule">
+        <th mat-header-cell *matHeaderCellDef>Schedule</th>
+        <td mat-cell *matCellDef="let job">
+          @if (job.schedule) {
+            <code>{{ job.schedule }}</code>
+            @if (!job.enabled) {
+              <span class="muted small"> (disabled)</span>
+            }
+          } @else {
+            <span class="muted">Manual</span>
+          }
+        </td>
+      </ng-container>
+      <ng-container matColumnDef="lastRun">
+        <th mat-header-cell *matHeaderCellDef>Last run</th>
+        <td mat-cell *matCellDef="let job">
+          @if (job.lastRun; as run) {
+            <a [routerLink]="['/runs', run.id]" class="last-run">
+              <app-status-chip [status]="run.status" />
+              <span class="muted small">
+                {{ run.dryRun ? 'dry run' : 'run' }} ·
+                {{ relativeTime(run.finishedAt ?? run.startedAt ?? run.createdAt) }} ·
+                {{ run.matched }} / {{ run.scanned }}
+              </span>
+            </a>
+          } @else {
+            <span class="muted">Never</span>
+          }
+        </td>
+      </ng-container>
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let job" class="actions">
+          @let busy = starting() === job.id || (job.lastRun && isActive(job.lastRun.status));
+          <button
+            matButton="outlined"
+            [disabled]="busy"
+            (click)="start(job, true)"
+            [attr.data-testid]="'dry-run-' + job.id"
+          >
+            Dry run
+          </button>
+          <button
+            matButton="tonal"
+            [disabled]="busy || job.syncMode === 'dry-run'"
+            [matTooltip]="job.syncMode === 'dry-run' ? 'Switch the sync mode to run for real' : ''"
+            (click)="start(job, false)"
+          >
+            Run now
+          </button>
+        </td>
+      </ng-container>
+      <tr mat-header-row *matHeaderRowDef="columns"></tr>
+      <tr mat-row *matRowDef="let row; columns: columns"></tr>
+    </table>
+  </div>
+}

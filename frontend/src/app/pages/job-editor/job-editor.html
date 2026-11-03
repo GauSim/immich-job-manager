@@ -1,0 +1,164 @@
+<div class="page-header">
+  <a matIconButton routerLink="/jobs" aria-label="Back to jobs"><mat-icon>arrow_back</mat-icon></a>
+  <h1>{{ isNew() ? 'New job' : job()?.name }}</h1>
+  @if (!isNew()) {
+    <button
+      matButton="outlined"
+      [disabled]="busy() || starting() || form.dirty"
+      (click)="start(true)"
+    >
+      Dry run
+    </button>
+    <button
+      matButton="tonal"
+      [disabled]="busy() || starting() || form.dirty || job()?.syncMode === 'dry-run'"
+      [matTooltip]="job()?.syncMode === 'dry-run' ? 'Switch the sync mode to run for real' : ''"
+      (click)="start(false)"
+    >
+      Run now
+    </button>
+  }
+</div>
+
+@if (loading()) {
+  <mat-progress-bar mode="indeterminate" />
+} @else {
+  <div class="layout">
+    <form [formGroup]="form" (ngSubmit)="save()" class="editor" novalidate>
+      <mat-card appearance="outlined">
+        <mat-card-header><mat-card-title>Job</mat-card-title></mat-card-header>
+        <mat-card-content class="fields">
+          <mat-form-field>
+            <mat-label>Name</mat-label>
+            <input matInput formControlName="name" data-testid="job-name" />
+            @if (form.controls.name.hasError('required')) {
+              <mat-error>Required</mat-error>
+            }
+            @if (serverError('name'); as e) {
+              <mat-error>{{ e }}</mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field>
+            <mat-label>Job type</mat-label>
+            <mat-select formControlName="typeId" data-testid="job-type">
+              @for (t of types(); track t.id) {
+                <mat-option [value]="t.id">{{ t.name }}</mat-option>
+              }
+            </mat-select>
+            @if (type()?.description; as d) {
+              <mat-hint>{{ d }}</mat-hint>
+            }
+            @if (serverError('typeId'); as e) {
+              <mat-error>{{ e }}</mat-error>
+            }
+          </mat-form-field>
+
+          <div class="row">
+            <mat-form-field>
+              <mat-label>Target album</mat-label>
+              <input matInput formControlName="targetAlbumName" data-testid="target-album" />
+              <mat-hint>Created in Immich if it does not exist</mat-hint>
+              @if (form.controls.targetAlbumName.hasError('required')) {
+                <mat-error>Required</mat-error>
+              }
+              @if (serverError('targetAlbumName'); as e) {
+                <mat-error>{{ e }}</mat-error>
+              }
+            </mat-form-field>
+            <mat-form-field>
+              <mat-label>Exclusion album</mat-label>
+              <input
+                matInput
+                formControlName="exclusionAlbumName"
+                [placeholder]="exclusionPlaceholder()"
+              />
+              <mat-hint>Move false positives here to keep them out</mat-hint>
+              @if (serverError('exclusionAlbumName'); as e) {
+                <mat-error>{{ e }}</mat-error>
+              }
+            </mat-form-field>
+          </div>
+
+          <div class="row">
+            <mat-form-field>
+              <mat-label>Sync mode</mat-label>
+              <mat-select formControlName="syncMode">
+                <mat-option value="dry-run">Dry run only (never changes Immich)</mat-option>
+                <mat-option value="additive">Additive (add new matches)</mat-option>
+                <mat-option value="mirror">Mirror (add, and remove own non-matches)</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field>
+              <mat-label>Schedule (cron)</mat-label>
+              <input matInput formControlName="schedule" placeholder="0 3 * * *" />
+              <mat-hint>Server time zone; scheduling arrives in phase 7</mat-hint>
+              @if (serverError('schedule'); as e) {
+                <mat-error>{{ e }}</mat-error>
+              }
+            </mat-form-field>
+          </div>
+
+          <mat-slide-toggle formControlName="enabled">Schedule enabled</mat-slide-toggle>
+        </mat-card-content>
+      </mat-card>
+
+      @if (type(); as t) {
+        <mat-card appearance="outlined">
+          <mat-card-header>
+            <mat-card-title>Parameters</mat-card-title>
+            <mat-card-subtitle>{{ t.name }} v{{ t.version }}</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content class="params" data-testid="params-form">
+            <app-params-form
+              [schema]="t.paramsSchema"
+              [model]="paramsModel()"
+              [form]="form.controls.params"
+            />
+          </mat-card-content>
+        </mat-card>
+      }
+
+      @if (formErrors().length) {
+        <div class="error-text" role="alert">
+          @for (e of formErrors(); track $index) {
+            <div>{{ e.path.join('.') || 'Request' }}: {{ e.message }}</div>
+          }
+        </div>
+      }
+
+      <div class="buttons">
+        @if (!isNew()) {
+          <button matButton type="button" class="delete" [disabled]="busy()" (click)="delete()">
+            <mat-icon>delete</mat-icon>Delete
+          </button>
+        }
+        <span class="spacer"></span>
+        <a matButton routerLink="/jobs">Cancel</a>
+        <button matButton="filled" type="submit" [disabled]="saving()" data-testid="save-job">
+          {{ isNew() ? 'Create job' : 'Save' }}
+        </button>
+      </div>
+    </form>
+
+    @if (!isNew()) {
+      <aside>
+        <mat-card appearance="outlined">
+          <mat-card-header><mat-card-title>Recent runs</mat-card-title></mat-card-header>
+          <mat-card-content>
+            @for (run of runs(); track run.id) {
+              <a class="run" [routerLink]="['/runs', run.id]">
+                <app-status-chip [status]="run.status" />
+                <span>{{ run.dryRun ? 'Dry run' : 'Run' }}</span>
+                <span class="muted">{{ run.matched }} / {{ run.scanned }}</span>
+                <span class="muted when">{{ relativeTime(run.createdAt) }}</span>
+              </a>
+            } @empty {
+              <p class="muted">No runs yet.</p>
+            }
+          </mat-card-content>
+        </mat-card>
+      </aside>
+    }
+  </div>
+}

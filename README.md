@@ -2,7 +2,7 @@
 
 Self-hosted companion app for [Immich](https://immich.app) v3: rerunnable, schedulable batch jobs that select assets (first job: screenshots) and keep them in an Immich album. Talks to Immich only through its REST API with a scoped API key.
 
-> Status: **phase 3** – screenshot job with dry runs and a review API. No UI and no album writes yet.
+> Status: **phase 4** – web UI: jobs dashboard, job editor with generated parameter forms, live run page and a review grid for dry runs. Album writes arrive in phase 5.
 
 ## Docs
 
@@ -43,6 +43,21 @@ npm run start:dev            # http://localhost:3000/api/health
 
 `backend/.env` is loaded automatically when present (development only).
 
+Run the UI with live reload (proxies `/api` to the backend on port 3000):
+
+```bash
+cd frontend
+npm start                    # http://localhost:4200
+```
+
+UI end-to-end tests (Playwright, against the real backend + production UI build and a fake Immich):
+
+```bash
+cd frontend
+npm run e2e:prepare          # builds UI and backend
+npm run e2e
+```
+
 ## Configuration
 
 All settings are environment variables, validated at boot; an invalid value stops the app with a list of problems. See [`.env.example`](.env.example).
@@ -55,6 +70,7 @@ All settings are environment variables, validated at boot; an invalid value stop
 | `AUTH_MODE` | `password` | `password` or `forward-auth` |
 | `PY_WORKER_URL` | unset | Python ML worker (phase 9) |
 | `DATA_DIR` | `/data` | SQLite location |
+| `PUBLIC_DIR` | `public` | Angular build served at `/` (skipped if missing) |
 | `MAX_CONCURRENT_RUNS` | `2` | Global run limit |
 | `MAX_FILE_READS` | `4` | Concurrent original-file reads from Immich |
 | `PORT` | `3000` | HTTP port |
