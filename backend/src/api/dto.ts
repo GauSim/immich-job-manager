@@ -49,3 +49,38 @@ export const LogQuery = z.object({
   limit: z.coerce.number().int().min(1).max(1000).default(500),
 });
 export type LogQuery = z.infer<typeof LogQuery>;
+
+const score = z.coerce.number().min(0).max(1);
+const bool = z.enum(['true', 'false']).transform((v) => v === 'true');
+
+/** `GET /runs/:id/candidates` — score band: `minScore` inclusive, `maxScore` exclusive. */
+export const CandidateQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(1000).default(200),
+  offset: z.coerce.number().int().min(0).default(0),
+  sort: z.enum(['-score', 'score', 'name']).default('-score'),
+  minScore: score.optional(),
+  maxScore: score.optional(),
+  selected: bool.optional(),
+});
+export type CandidateQuery = z.infer<typeof CandidateQuery>;
+
+/**
+ * `PATCH /runs/:id/candidates` — tick or untick candidates, either by id or
+ * by filter (score band / current state). With neither, applies to all.
+ */
+export const UpdateCandidatesDto = z
+  .strictObject({
+    selected: z.boolean(),
+    assetIds: z.array(z.string().min(1)).min(1).max(10_000).optional(),
+    filter: z
+      .strictObject({
+        minScore: score.optional(),
+        maxScore: score.optional(),
+        selected: z.boolean().optional(),
+      })
+      .optional(),
+  })
+  .refine((v) => !(v.assetIds && v.filter), {
+    error: 'use either assetIds or filter, not both',
+  });
+export type UpdateCandidatesDto = z.infer<typeof UpdateCandidatesDto>;

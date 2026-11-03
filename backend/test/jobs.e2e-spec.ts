@@ -13,7 +13,7 @@ import {
   serveLibrary,
 } from './support/fake-immich-server.js';
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 describe('Jobs & runs API (e2e)', () => {
   let immich: FakeImmichServer;

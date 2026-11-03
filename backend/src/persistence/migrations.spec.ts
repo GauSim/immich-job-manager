@@ -48,6 +48,7 @@ describe('migrations', () => {
       'idx_job_run_job_created',
       'idx_job_run_status',
       'idx_run_candidate_run_score',
+      'idx_run_candidate_asset',
       'idx_run_log_run',
       'idx_run_log_ts',
     ]) {
@@ -65,6 +66,7 @@ describe('migrations', () => {
   });
 
   it('upgrades an existing database without losing rows', async () => {
+    await ds.undoLastMigration({ transaction: 'each' });
     await ds.undoLastMigration({ transaction: 'each' }); // back to the Init schema
     await ds.query(
       `INSERT INTO job (id, name, type_id, params) VALUES ('j1', 'old', 'noop-test', '{}')`,

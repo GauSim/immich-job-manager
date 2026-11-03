@@ -173,24 +173,33 @@ Tasks:
 
 **Goal:** first real job, preview only.
 
-**Status:** not started
+**Status:** done (2026-11-03) – verified against a throwaway Immich v3.3.5 and a real-library metadata sample; pending: full dry run over the real library
 
 Tasks:
 
-- [ ] `ScreenshotParams` Zod schema with defaults (threshold 0.6, patterns, resolution list, `readIosTag` false for now, CLIP disabled).
-- [ ] Scoring: filename, PNG, no camera EXIF, screen dimensions. Images only (`type: IMAGE`).
-- [ ] Reasons per candidate.
+- [x] `ScreenshotParams` Zod schema with defaults (threshold 0.6, patterns, resolution list, `readIosTag` false for now, CLIP disabled).
+  - Note: album names are job-level fields (phase 2), not params. Resolutions are `"WIDTHxHEIGHT"` strings (simpler UI form than `[number, number]` tuples). Added `descriptionTags` (default `["Screenshot"]`) and `minAspectRatio` (default 2). `readIosTag` / `clip` exist but only log a warning until phase 6.
+- [x] Scoring: filename, PNG, no camera EXIF, screen dimensions. Images only (`type: IMAGE`).
+  - Note: plus a decisive **description-tag** signal: the real library showed that Immich's `exifInfo.description` of iPhone screenshots is `"Screenshot"` (API notes §4.2, §8a). Weights per SDD §6.1; screen size = listed resolution (either orientation) or aspect ≥ 2 without camera EXIF.
+- [x] Reasons per candidate.
+  - Note: the job also logs a per-signal match summary at the end of the run.
 - [x] Dry-run persistence: `run_candidate` rows (batched), `selected = true` by default.
-  - Note: done in phase 2 as part of the runner's page transaction (`RunStore`).
-- [ ] Candidates API: `GET /runs/:id/candidates` (paged, sort by score, filter by score band), `PATCH /runs/:id/candidates` (tick/untick).
-- [ ] Thumbnail proxy `GET /assets/:id/thumbnail` (only assets present in a run).
-- [ ] Fixture set: anonymised metadata JSON for screenshots, camera photos and edge cases (exported graphics, wallpapers).
+  - Note: done in phase 2 as part of the runner's page transaction (`RunStore`). Phase 3 adds `original_file_name` for the grid (migration `CandidateFileName`, hand-written).
+- [x] Candidates API: `GET /runs/:id/candidates` (paged, sort by score, filter by score band), `PATCH /runs/:id/candidates` (tick/untick).
+  - Note: `?sort=-score|score|name&minScore=&maxScore=&selected=&limit=&offset=`; responses include a `summary` (all, selected, unselected, high ≥ 0.8, medium) for the grid's chips. `PATCH` takes `{ selected, assetIds }` or `{ selected, filter }` (no ids/filter = all); 409 for non-dry runs.
+- [x] Thumbnail proxy `GET /assets/:id/thumbnail` (only assets present in a run).
+  - Note: guarded by an `asset_id` index on `run_candidate`; streams Immich's thumbnail with `Cache-Control: private, max-age=86400`; own concurrency limit (6) in `ImmichClient`; Immich 404 → 404.
+- [x] Fixture set: anonymised metadata JSON for screenshots, camera photos and edge cases (exported graphics, wallpapers).
+  - Note: `backend/test/fixtures/real-library-sample.json` — 999 images from the real-library spike, anonymised with `tools/immich-spike/anonymise-metadata.py` (labels: screenshot / photo / unknown). Hand-made edge cases (Android, macOS DE/FR, messenger JPEG, wallpaper, generated PNG, panorama, camera photo named "Screenshot…") live in `screenshot.job.spec.ts`.
 
-- [ ] **Deliverables:** a full dry run on your library returns scored candidates via API.
+- [x] **Deliverables:** a full dry run on your library returns scored candidates via API.
+  - Note: verified via API against the throwaway Immich v3.3.5 (4 of 5 timeline images matched, thumbnails proxied) and in e2e tests on the real-library sample served by a fake Immich.
 
-- [ ] **Tests:** each signal and the threshold on fixtures.
+- [x] **Tests:** each signal and the threshold on fixtures.
+  - Note: real-library sample at default params: 96/96 tagged screenshots matched (1.0), 0/679 camera photos, 1/224 others (887×1774 PNG, 0.6). Known false positive by design: a screen-sized PNG without tag (e.g. wallpaper) scores 0.6. e2e: review flow, tick/untick, thumbnail guard, 30k-asset dry run (~0.7 s against the fake).
 
 - [ ] **Done when:** a dry run over 30k assets finishes and the top candidates look right when spot-checked in Immich.
+  - Note: 30k simulated (29,970 assets, 30 pages); still to run against the real library.
 
 ---
 
@@ -252,6 +261,7 @@ Tasks:
 - [ ] `AssetFeatureCache` service over `asset_feature` (lookup by `asset_id` + `checksum`).
 - [ ] `fileTagScorer`: `readOriginalHead` with `Range: bytes=0-65535` (or stream-and-abort, per phase 0 result), parse with `exifr`, detect `UserComment = "Screenshot"`.
 - [ ] Only read when needed: PNG or no camera EXIF, and not already ≥ threshold from metadata.
+  - Note (phase 3): tagged iPhone screenshots already score 1.0 from the description tag, so reads are only needed for untagged borderline assets.
 - [ ] File reads limited by `MAX_FILE_READS`; totals `files_read`, `cache_hits`.
 - [ ] `smartSource` + `rankScorer` for optional CLIP queries; rank map built once per run.
 - [ ] Enable `readIosTag` by default.

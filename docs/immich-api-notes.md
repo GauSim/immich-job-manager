@@ -95,7 +95,7 @@ All present on every item (with `withExif: true`):
 | `exifInfo.make`, `.model`, `.lensModel` | `null` when absent (not `undefined`) |
 | `exifInfo.exposureTime` | **string**, e.g. `"1/250"` |
 | `exifInfo.fNumber` | number, e.g. `2.8` |
-| `exifInfo.description` | `""` when absent; Immich does **not** expose `UserComment` (confirmed: iOS-tagged PNG has empty description) |
+| `exifInfo.description` | `""` when absent. **Real iPhone screenshots have `"Screenshot"` here** (96 of 96 in the real-library sample, incl. one cropped screenshot saved as JPEG), so the iOS screenshot marker is available from metadata. Immich does not read `UserComment`: a synthetic PNG carrying only EXIF `UserComment` had an empty description, so iOS must also write the marker to a field Immich reads (`ImageDescription` / XMP description). Used as the decisive `description-tag` signal (phase 3). |
 
 "No camera EXIF" check must treat `null` (and `""`) as empty.
 
@@ -143,6 +143,12 @@ Works on the real instance (ML running): 5 results for a text query, paginated l
 - Validation error: `400 { message: "Validation failed", errors: [{ code, path: ["size"], message, … }] }`.
 - Every response carries `x-correlation-id` (short id, e.g. `iqq1yfjn`); log it on failures.
 - Permission error: `403 { message: "Missing required permission: <name>" }`.
+
+## 8a. Real-library sample (phase 3)
+
+`docs/spike-out/spike-report.json` (first 1,000 assets of the real library, rerun 2026-11-03) was anonymised into `backend/test/fixtures/real-library-sample.json` with `tools/immich-spike/anonymise-metadata.py` (file-name patterns, MIME, dimensions, camera EXIF and description only; no dates, GPS or places). Of 999 images: 96 tagged screenshots (95 PNG 1320×2868, 1 JPEG), 679 camera photos (HEIC/JPEG), 224 others (camera-less JPEGs from messengers/apps, 17 untagged PNGs — mostly generated or saved images at 1024×1536, 1672×941 …). With the default parameters the screenshot job matches all 96 tagged screenshots (score 1.0), no camera photo, and 1 untagged PNG (887×1774, aspect 2.0, score 0.6).
+
+> Note: the committed `docs/spike-out/spike-report.json` itself contains real file names, GPS coordinates and places; consider removing it from the repository if it is ever made public.
 
 ## 9. Impact on the plan / SDD
 

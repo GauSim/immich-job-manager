@@ -151,21 +151,24 @@ export function searchResponse(
 }
 
 /**
- * Serves a fake library of `count` images on `/search/metadata` with Immich-style
- * opaque cursors. `hooks.beforePage(offset)` may delay or return an error response.
+ * Serves a fake library on `/search/metadata` with Immich-style opaque cursors:
+ * `count` generated images, or the given assets. `hooks.beforePage(offset)` may
+ * delay or return an error response.
  */
 export function serveLibrary(
   server: FakeImmichServer,
-  count: number,
+  library: number | Record<string, unknown>[],
   hooks: {
     beforePage?: (
       offset: number,
     ) => Promise<CannedResponse | void> | CannedResponse | void;
   } = {},
 ): void {
-  const assets = Array.from({ length: count }, (_, i) =>
-    fakeAsset(`asset-${i}`),
-  );
+  const assets =
+    typeof library === 'number'
+      ? Array.from({ length: library }, (_, i) => fakeAsset(`asset-${i}`))
+      : library;
+  const count = assets.length;
   server.on('POST /search/metadata', async (req) => {
     const body = req.body as { cursor?: string; size?: number };
     const offset = body.cursor

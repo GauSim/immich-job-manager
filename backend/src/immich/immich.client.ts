@@ -45,6 +45,8 @@ export interface ImmichClientOptions {
   apiConcurrency?: number;
   /** Concurrent original-file reads (default 4). */
   fileConcurrency?: number;
+  /** Concurrent thumbnail requests for the UI proxy (default 6). */
+  thumbnailConcurrency?: number;
   /** Retries after the first attempt on 429/5xx/network errors (default 3). */
   retries?: number;
   /** First backoff delay; doubles per attempt, with jitter (default 500 ms). */
@@ -154,6 +156,7 @@ export class ImmichClient {
   private readonly logger: LoggerService;
   private readonly apiLimit: LimitFunction;
   private readonly fileLimit: LimitFunction;
+  private readonly thumbnailLimit: LimitFunction;
 
   constructor(options: ImmichClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
@@ -165,6 +168,7 @@ export class ImmichClient {
     this.logger = options.logger ?? new Logger(ImmichClient.name);
     this.apiLimit = pLimit(options.apiConcurrency ?? 2);
     this.fileLimit = pLimit(options.fileConcurrency ?? 4);
+    this.thumbnailLimit = pLimit(options.thumbnailConcurrency ?? 6);
   }
 
   // ---------------------------------------------------------------- server
@@ -303,7 +307,18 @@ export class ImmichClient {
     let cursor: string | undefined;
     do {
       const page = await this.searchMetadataPage(
-        { albumIds: [albumId], size: SEARCH_PAGE_SIZE, cursor },
+        {
+          albumIds: [albumId],
+          // Explicit: omitting visibility also returns hidden assets (API notes §4.3);
+          // album members can be in the timeline, archived or hidden (never locked).
+          visibility: [
+            AssetVisibility.Timeline,
+            AssetVisibility.Archive,
+            AssetVisibility.Hidden,
+          ],
+          size: SEARCH_PAGE_SIZE,
+          cursor,
+        },
         options,
       );
       for (const a of page.items) ids.push(a.id);
@@ -381,18 +396,21 @@ export class ImmichClient {
 
   /**
    * `GET /assets/{id}/thumbnail` as a stream, for the backend's thumbnail proxy.
-   * Not concurrency-limited here; the proxy decides (phase 3).
+   * Limited by its own concurrency (default 6) so the review grid cannot
+   * starve runs; the slot is held until the response headers arrive.
    */
   async getThumbnail(
     assetId: string,
     options: CallOptions = {},
   ): Promise<Thumbnail> {
     const ctx: RequestContext = {};
-    const res = await this.rawGet(
-      'getThumbnail',
-      `/assets/${encodeURIComponent(assetId)}/thumbnail?size=thumbnail`,
-      ctx,
-      options,
+    const res = await this.thumbnailLimit(() =>
+      this.rawGet(
+        'getThumbnail',
+        `/assets/${encodeURIComponent(assetId)}/thumbnail?size=thumbnail`,
+        ctx,
+        options,
+      ),
     );
     const length = res.headers.get('content-length');
     return {

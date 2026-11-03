@@ -25,7 +25,7 @@ describe('RunExecutor (with RunQueue, real SQLite)', () => {
     const { identifiers } = await h.jobs.insert({
       name: 'Test job',
       typeId: 'fake-source',
-      params: { ...h.fake.defaultParams, ...params },
+      params: { ...h.fake.defaultParams, ...params } as never,
       targetAlbumName: 'Test',
     });
     return identifiers[0].id as string;
