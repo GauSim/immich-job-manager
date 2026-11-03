@@ -88,29 +88,42 @@ Tasks:
 
 **Goal:** a NestJS app that starts, validates config, has a database, and talks to Immich.
 
-**Status:** not started
+**Status:** implemented (2026-11-03) – verified against a throwaway Immich v3.3.5; pending: health check against the real instance
 
 Tasks:
 
-- [ ] `ConfigModule`: Zod schema for all env vars; read `*_FILE` secrets; fail fast with clear messages.
-- [ ] `PersistenceModule`: `@nestjs/typeorm` with `better-sqlite3`, WAL pragma, `synchronize: false`, migrations folder, migration run on boot.
-- [ ] Entities + first migration: `job`, `job_run`, `run_candidate`, `job_asset`, `asset_feature`, `run_log`, `setting`, with indexes.
-- [ ] `ImmichModule` / `ImmichClient`:
-  - [ ] SDK init with base URL and key.
-  - [ ] `assertCompatible()` (major = 3) on boot.
+- [x] `ConfigModule`: Zod schema for all env vars; read `*_FILE` secrets; fail fast with clear messages.
+  - Note: validated in `main.ts` *before* Nest starts (`loadConfig()` collects every problem, prints a list, exits 1); `ConfigModule.forRoot(config)` provides the result as `APP_CONFIG`. Setting both `X` and `X_FILE` is an error. Added `LOG_LEVEL`; `IMMICH_URL` must end in `/api`. `backend/.env` is auto-loaded in development.
+- [x] `PersistenceModule`: `@nestjs/typeorm` with `better-sqlite3`, WAL pragma, `synchronize: false`, migrations folder, migration run on boot.
+  - Note: TypeORM 1.x with `better-sqlite3` 12 (TypeORM's peer range). Entities and migrations are registered as class lists, not globs (ESM-friendly). `foreign_keys = ON`, `synchronous = NORMAL`, 5 s busy timeout. `npm run migration:generate` runs the TypeORM CLI against the compiled `dist/`.
+- [x] Entities + first migration: `job`, `job_run`, `run_candidate`, `job_asset`, `asset_feature`, `run_log`, `setting`, with indexes.
+  - Note: snake_case columns via a naming strategy; FKs with `ON DELETE CASCADE` (`job_asset.added_by_run_id` → `SET NULL`). Beyond SDD §7: `job.created_at/updated_at`, `job_run.created_at` (queued at), indexes `job_run(job_id, created_at)`, `job_run(status)`, `run_log(run_id, id)`, `run_log(ts)`. `job_asset(job_id, asset_id)` and `asset_feature(asset_id)` are primary keys, so no extra index. A test asserts the migrations match the entities exactly.
+- [x] `ImmichModule` / `ImmichClient`:
+  - [x] SDK init with base URL and key.
+    - Note: no global `init()`; every SDK call gets per-call options (base URL, key, retrying `fetch`, abort signal).
+  - [x] `assertCompatible()` (major = 3) on boot.
     - Note (phase 0 spike): use `GET /server/version` (structured, no permission needed).
-  - [ ] Retry with backoff on 429/5xx, `X-Correlation-ID` logging.
-  - [ ] Concurrency limiters (`p-limit`): API = 2, file reads = 4.
-  - [ ] Methods: `searchMetadataPage`, `searchSmart`, `findOrCreateAlbum`, `listAlbumMemberIds`, `addToAlbum` (chunked), `removeFromAlbum` (chunked), `readOriginalHead`, `getThumbnail`.
+    - Note: incompatible major → boot fails; Immich unreachable → warning only (it may start after us), reported by `/api/health`.
+  - [x] Retry with backoff on 429/5xx, `X-Correlation-ID` logging.
+    - Note: 3 retries, exponential backoff with jitter, honours `Retry-After`; network errors retried too; abortable. Errors are typed (`ImmichApiError`, `ImmichUnreachableError`, `ImmichIncompatibleError`, `ImmichSmartSearchUnavailableError`) and carry the correlation id.
+  - [x] Concurrency limiters (`p-limit`): API = 2, file reads = 4.
+    - Note: file reads use `MAX_FILE_READS`. Thumbnails are not limited yet; the proxy decides in phase 3.
+  - [x] Methods: `searchMetadataPage`, `searchSmart`, `findOrCreateAlbum`, `listAlbumMemberIds`, `addToAlbum` (chunked), `removeFromAlbum` (chunked), `readOriginalHead`, `getThumbnail`.
     - Note (phase 0 spike): `searchMetadataPage` must use the v3.3 `filter` + `orderBy` + `cursor` request style (`page` is deprecated); add/remove return per-id `success`/`error`. See `docs/immich-api-notes.md` §9.
-- [ ] `GET /api/health` (DB + Immich reachability + version).
-- [ ] Pino logging with request ids.
+    - Note: add/remove return `{ succeeded, unchanged, failed }` (`duplicate` / `not_found` → unchanged) and de-duplicate ids. `readOriginalHead` sends `Range` and aborts the stream after 64 KiB if the server ignores it. `searchSmart` still pages by number (unverified without ML) and maps a 500 to `ImmichSmartSearchUnavailableError`. `findOrCreateAlbum` matches owned albums by exact name.
+- [x] `GET /api/health` (DB + Immich reachability + version).
+  - Note: `status: ok | degraded | error`; HTTP 200 unless the database is down (503), so the container stays healthy while Immich restarts. Immich check: no retries, 3 s timeout.
+- [x] Pino logging with request ids.
+  - Note: `nestjs-pino`; request id from a valid incoming `x-request-id` or a new UUID, echoed in the response; API key / auth / cookie headers redacted; `/api/health` not access-logged; pretty output outside production.
 
-- [ ] **Deliverables:** `docker compose up` starts the backend; `/api/health` reports Immich v3.
+- [x] **Deliverables:** `docker compose up` starts the backend; `/api/health` reports Immich v3.
+  - Note: verified with the real `docker-compose.yml` (Docker secrets, `./data` volume) on the Immich network against a throwaway Immich v3.3.5: `{"status":"ok", … "version":"v3.3.5"}`, container `healthy`. `./data` must be writable by uid 1000 (documented in README).
 
-- [ ] **Tests:** config validation, ImmichClient against a mocked HTTP server (retries, chunking, version check).
+- [x] **Tests:** config validation, ImmichClient against a mocked HTTP server (retries, chunking, version check).
+  - Note: 41 unit tests (config, ImmichClient against a local fake Immich HTTP server, migrations ↔ entities), 5 e2e tests (boot + migrations, health ok/degraded/down, incompatible version refuses boot). Every client method was also exercised against the live throwaway v3.3.5. CI smoke-tests the image: invalid config exits 1; unreachable Immich → `degraded`.
 
 - [ ] **Done when:** health endpoint is green against your real Immich; invalid config stops boot with a readable error.
+  - Note: invalid config ✓ (locally and in CI). Health green against a throwaway Immich v3.3.5 ✓; still to confirm against the real instance.
 
 ---
 

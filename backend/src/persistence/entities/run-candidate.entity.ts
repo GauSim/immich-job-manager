@@ -1,0 +1,34 @@
+import {
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  PrimaryColumn,
+} from 'typeorm';
+import { JobRunEntity } from './job-run.entity.js';
+
+/** Dry runs only: a candidate asset with its score, for the review grid. */
+@Entity('run_candidate')
+@Index('idx_run_candidate_run_score', ['runId', 'score'])
+export class RunCandidateEntity {
+  @PrimaryColumn('text')
+  runId: string;
+
+  @PrimaryColumn('text')
+  assetId: string;
+
+  @ManyToOne(() => JobRunEntity, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'run_id' })
+  run?: JobRunEntity;
+
+  @Column('real')
+  score: number;
+
+  @Column('simple-json')
+  reasons: string[];
+
+  /** Unticked in the review grid → not applied. */
+  @Column('boolean', { default: true })
+  selected: boolean;
+}
