@@ -44,7 +44,7 @@ P6 and P7 are independent and can be done in either order.
 
 **Goal:** an empty but buildable monorepo, and certainty about the Immich v3 API shapes.
 
-**Status:** done (2026-11-03) – pending: first green CI run on GitHub, spike rerun against the real instance
+**Status:** done (2026-11-03) – one follow-up open: spike rerun against the real instance
 
 Tasks:
 
@@ -67,7 +67,7 @@ Tasks:
 - [x] Shared tooling: Node 22 via `.nvmrc`, ESLint + Prettier, `npm` workspaces or two independent packages.
   - Note: two independent packages (own lockfiles), matching the Dockerfile. Frontend lints with ESLint (`angular-eslint`); backend keeps NestJS 12's default **oxlint** (type-aware) instead of ESLint. Prettier in both, `format:check` in CI. Root `.editorconfig`.
 - [x] CI (GitHub Actions or similar): lint, unit tests, build both apps, build Docker image.
-  - Note: `.github/workflows/ci.yml` – backend, frontend, spike typecheck, Docker build + `/api/health` smoke test. Docker image built and smoke-tested locally.
+  - Note: `.github/workflows/ci.yml` – backend, frontend, spike typecheck, Docker build + `/api/health` smoke test. Docker image built and smoke-tested locally and in CI. Runs on every branch push and on PRs to `main`.
 - [x] **API spike** (scratch script with `@immich/sdk` against your instance):
   - [x] `GET /server/about` → confirm v3.x.
   - [x] `POST /search/metadata` with `type: IMAGE`, `withExif: true`, `size: 1000` → confirm `originalFileName`, `originalMimeType`, `exifInfo.make/model`, dimensions, `checksum`.
@@ -78,7 +78,7 @@ Tasks:
   - [ ] Rerun `npm run spike` against the real Immich instance (incl. `SPIKE_ASSET_ID` of a real iPhone screenshot) and diff with the notes.
 
 - [x] **Deliverables:** repo, green CI, spike notes in `docs/immich-api-notes.md`.
-  - Note: CI green locally (lint, tests, build, Docker); first GitHub Actions run to be confirmed after push.
+  - Note: CI green on GitHub Actions (run #1: backend, frontend, spike typecheck, Docker build + health smoke test).
 
 - [x] **Done when:** both apps build in CI; spike answers the open items in SDD §13.3.
 
