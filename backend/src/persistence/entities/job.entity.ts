@@ -26,7 +26,16 @@ export class JobEntity {
   typeVersion: number;
 
   @Column('simple-json')
-  params: Record<string, unknown>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- arbitrary JSON, validated by the job type
+  params: Record<string, any>;
+
+  /** Album the job syncs into; resolved (or created) by name at run time. */
+  @Column('text', { default: '' })
+  targetAlbumName: string;
+
+  /** Moving an asset here keeps it out of all future runs. null → `<target> – excluded`. */
+  @Column('text', { nullable: true })
+  exclusionAlbumName: string | null;
 
   @Column('text', { nullable: true })
   targetAlbumId: string | null;
