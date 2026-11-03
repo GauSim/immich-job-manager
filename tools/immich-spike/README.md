@@ -16,6 +16,17 @@ Optional: `SPIKE_ASSET_ID=<id of a real iPhone screenshot>` to test the partial 
 
 Side effects: creates the album `immich-album-jobs-spike` (if missing), adds up to 3 assets and removes them again. Delete the empty album by hand afterwards. The report is written to `out/spike-report.json`.
 
+## Run with Docker Compose (e.g. on a NAS without a console)
+
+`docker-compose.yaml` runs the spike once in a `node:22-alpine` container (no image build needed):
+
+1. `cp spike.env.example spike.env` and fill in `IMMICH_URL`, `IMMICH_API_KEY` (and optionally `SPIKE_ASSET_ID`). `spike.env` is git-ignored.
+   If Immich runs on the same NAS with port 2283 published, the default `http://host.docker.internal:2283/api` works; otherwise use `http://<nas-ip>:2283/api`.
+2. Copy this folder to the NAS (`node_modules/` can be left out; it is reinstalled inside the container).
+3. In the NAS Docker app (UGREEN: Docker → Project → Create), point the project at the folder and use the included `docker-compose.yaml`. Start it.
+
+The container installs dependencies, runs the spike and exits (`restart: "no"`). Read the result in the container log; the report is written to `out/spike-report.json` in the folder. Start the project again to rerun.
+
 ## Throwaway local instance (optional)
 
 Only for a fresh, disposable Immich (it signs up an admin and uploads test files):

@@ -3,13 +3,13 @@
 | | |
 | --- | --- |
 | Date | 2026-11-03 |
-| Immich server | v3.3.5 (throwaway instance, official compose without ML) |
+| Immich server | v3.3.5 (throwaway instance, official compose without ML); rerun 2026-11-03 against the real instance (v3.3.5, with ML) |
 | SDK | `@immich/sdk` 3.3.5 |
 | Spike tool | [`tools/immich-spike`](../tools/immich-spike/README.md) |
 
 The spike ran against a fresh local Immich v3.3.5 seeded with synthetic fixtures (iOS-style screenshot PNG with `UserComment = "Screenshot"`, the same PNG without the tag, Android and macOS screenshot names, a camera JPEG, and an archived tall PNG). All calls used a **scoped API key** with only the permissions listed below.
 
-> **To do (Simon):** rerun `npm run spike` in `tools/immich-spike` against the real instance and diff the report with the findings here. See the tool README.
+**Rerun against the real instance (2026-11-03, via `tools/immich-spike/docker-compose.yaml` on the NAS):** all findings below confirmed. Differences: omitted visibility also returns **hidden** assets (§4.3), `/search/smart` works with ML (§5), and the Range read was verified on a real 8 MB iPhone screenshot (§7). `search.metadata.pageWithFilter` failing with `400` is the expected result of that check.
 
 ---
 
@@ -101,7 +101,7 @@ All present on every item (with `withExif: true`):
 
 ### 4.3 Visibility
 
-- Omitting `visibility` (legacy) or `filter.visibility` (new) returns **timeline + archive** (hidden/locked not tested). Matches SDD §5.3.
+- Omitting `visibility` (legacy) or `filter.visibility` (new) returns timeline + archive **and hidden** assets. On the real instance the hidden ones were Live Photo motion parts (`.MOV`, 103 of 1,000 in the legacy result). Differs from SDD §5.3, which assumed timeline + archive only.
 - `visibility: 'timeline'` / `filter.visibility: { in: ['timeline'] }` excludes archived assets.
 - The adapter always sets visibility explicitly from `includeArchived`.
 
@@ -111,7 +111,7 @@ Both `updatedAfter` (legacy) and `filter.updatedAt.gt` work as expected (future 
 
 ## 5. `POST /search/smart`
 
-Needs the machine-learning container. Without it the server returns `500 Failed to search smart` (after the permission check, so `asset.read` is sufficient). The adapter must map this to a clear "Immich ML unavailable" error and the job should skip the CLIP signal rather than fail. Response shape not verified (no ML in the spike).
+Works on the real instance (ML running): 5 results for a text query, paginated like legacy search (`nextPage: "2"`). Needs the machine-learning container. Without it the server returns `500 Failed to search smart` (after the permission check, so `asset.read` is sufficient). The adapter must map this to a clear "Immich ML unavailable" error and the job should skip the CLIP signal rather than fail. 
 
 ## 6. Albums
 
@@ -136,7 +136,7 @@ Needs the machine-learning container. Without it the server returns `500 Failed 
 - `GET /assets/{id}/original` with `Range` → `206` (see §1). Without `Range` → `200` with the full file.
 - `GET /assets/{id}/thumbnail` needs `asset.view`.
 - `exifr.parse(buffer, { pick: ['UserComment'] })` returns `userComment` as **raw bytes**: 8-byte charset prefix (`ASCII\0\0\0`, `UNICODE\0`, …) + payload. Decode before comparing to `"Screenshot"` (see `decodeUserComment` in `tools/immich-spike/src/spike.ts`).
-- In the test PNG the `eXIf` chunk sits right after `IHDR`; real iPhone screenshots should be checked against the real instance (the spike's Range check reports `userComment` for any asset id via `SPIKE_ASSET_ID`).
+- In the test PNG the `eXIf` chunk sits right after `IHDR`. **Verified on a real iPhone screenshot** (8.1 MB PNG): `206`, 65,536 bytes, `UserComment` decodes to `"Screenshot"` from the first 64 KiB.
 
 ## 8. Errors
 
@@ -156,4 +156,5 @@ Needs the machine-learning container. Without it the server returns `500 Failed 
 | Phase 5 `AlbumSyncService` | Check per-id `success`/`error`; `duplicate` and `not_found` are benign. |
 | Phase 6 `fileTagScorer` | Range read is supported; decode `UserComment` bytes; fall back to stream-and-abort if a `200` comes back. |
 | Phase 6 CLIP | Handle `500` from `/search/smart` as "ML unavailable" → skip signal. |
+| Phase 1/2 visibility | Always send `filter.visibility` explicitly: omitting it also returns hidden assets (Live Photo motion parts). |
 | README (phase 8) | Document the permission list in §2. |

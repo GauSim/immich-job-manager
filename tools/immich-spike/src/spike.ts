@@ -36,9 +36,10 @@ import {
 
 const baseUrl = required('IMMICH_URL');
 const apiKey = required('IMMICH_API_KEY');
-const albumName = process.env.SPIKE_ALBUM_NAME ?? 'immich-album-jobs-spike';
+const albumName = process.env.SPIKE_ALBUM_NAME || 'immich-album-jobs-spike';
 
 const report: Record<string, unknown> = { baseUrl, startedAt: new Date().toISOString() };
+console.log(`Immich: ${baseUrl}`);
 
 function required(name: string): string {
   const v = process.env[name];
@@ -51,7 +52,8 @@ function required(name: string): string {
 
 function describeError(e: unknown) {
   if (isHttpError(e)) return { status: e.status, data: e.data };
-  return { message: (e as Error).message };
+  const cause = (e as Error & { cause?: { code?: string; message?: string } }).cause;
+  return { message: (e as Error).message, cause: cause?.code ?? cause?.message };
 }
 
 /** Runs one check, prints a short line, stores the result in the report. */
@@ -64,6 +66,7 @@ async function check<T>(name: string, fn: () => Promise<T>): Promise<T | undefin
   } catch (e) {
     report[name] = { ok: false, error: describeError(e) };
     console.log(`✘ ${name}: ${JSON.stringify(describeError(e))}`);
+    console.error('[debug]', e);
     return undefined;
   }
 }
@@ -291,7 +294,7 @@ async function main() {
 
   // 9. HTTP Range on originals
   const rangeAsset =
-    process.env.SPIKE_ASSET_ID ??
+    (process.env.SPIKE_ASSET_ID || undefined) ??
     items.find((a) => /^IMG_\d+\.PNG$/i.test(a.originalFileName))?.id ??
     items.find((a) => a.originalMimeType === 'image/png')?.id ??
     items[0]?.id;
