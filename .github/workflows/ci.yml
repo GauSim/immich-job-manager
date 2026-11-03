@@ -84,6 +84,7 @@ jobs:
       - run: npm ci
       - run: npm run test:scale -- --silent=false
 
+  immich-contract:
     name: Contract tests (real Immich v3)
     runs-on: ubuntu-latest
     needs: [backend]
