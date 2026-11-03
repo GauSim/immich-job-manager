@@ -207,23 +207,32 @@ Tasks:
 
 **Goal:** everything from phases 2–3 usable in the browser. **Milestone M1.**
 
-**Status:** not started
+**Status:** done (2026-11-03) – verified against a throwaway Immich v3.3.5 and in Playwright against the real backend with 2,910 candidates
 
 Tasks:
 
-- [ ] App shell: Material toolbar, routes (`/jobs`, `/jobs/:id`, `/runs/:id`, `/settings`), HTTP interceptor for errors (field errors, snackbar, retry).
-- [ ] Dashboard: Immich status, job list with last run and status chip, buttons "Run now" / "Dry run".
-- [ ] Job editor: job type select, albums, sync mode, cron input, params form generated with ngx-formly (Material theme) from JSON Schema.
-- [ ] Run detail: progress bar, live log via SSE (`EventSource`), totals, cancel/resume.
-- [ ] Review grid (dry runs): CDK virtual scroll, lazy thumbnails, score badge, reasons, checkbox, score-band chips, sort.
-- [ ] Confirmation dialogs for destructive actions (placeholder until phase 5).
-- [ ] Build into backend `/public`; `ServeStaticModule` with SPA fallback.
+- [x] App shell: Material toolbar, routes (`/jobs`, `/jobs/:id`, `/runs/:id`, `/settings`), HTTP interceptor for errors (field errors, snackbar, retry).
+  - Note: also `/jobs/new`. Pages are lazy-loaded; Formly is provided on the job-editor routes only (initial bundle 635 kB raw / 142 kB transferred; budget warning raised to 750 kB). The interceptor passes `400 { errors[] }` through to the form (shown on the matching field, incl. generated params), shows the server message for other 4xx, and offers **Retry** (re-sends the request) for network errors and 5xx. Toolbar shows the Immich status (health polled every 30 s).
+- [x] Dashboard: Immich status, job list with last run and status chip, buttons "Run now" / "Dry run".
+  - Note: "Run now" is disabled for jobs in dry-run sync mode (tooltip explains); empty state with "Create a job".
+- [x] Job editor: job type select, albums, sync mode, cron input, params form generated with ngx-formly (Material theme) from JSON Schema.
+  - Note: ngx-formly 11 (`FormlyJsonschema`); custom field types for string lists (chips), booleans (plain toggle) and nested objects; labels humanised from keys, descriptions from the Zod schema. Server field errors land on the field (e.g. invalid cron). Also: delete (confirmation), recent runs, start runs from the editor.
+- [x] Run detail: progress bar, live log via SSE (`EventSource`), totals, cancel/resume.
+  - Note: indeterminate progress (Immich gives no library total, API notes §4.1), live totals and duration, log with live lines merged, error card (incl. Immich correlation id). The page reloads the authoritative run/log when the run ends.
+- [x] Review grid (dry runs): CDK virtual scroll, lazy thumbnails, score badge, reasons, checkbox, score-band chips, sort.
+  - Note: rows of cards (column count from the width); all candidates of the current filter are loaded in pages of 1,000; chips All / Score ≥ 0.8 / Below 0.8 / Unticked with counts; sort by score or name; tick/untick (optimistic, reverted on error) and "Tick all / Untick all" for the current filter. Native checkboxes instead of `mat-checkbox` (half the DOM per card).
+- [x] Confirmation dialogs for destructive actions (placeholder until phase 5).
+  - Note: delete job and switching to mirror mode ask for confirmation; "Apply to album" shows an info dialog until phase 5.
+- [x] Build into backend `/public`; `ServeStaticModule` with SPA fallback.
+  - Note: `PUBLIC_DIR` (default `public`, as in the Docker image); skipped with a warning when missing (development). `/api/*` excluded, so unknown API paths stay JSON 404s. `ng serve` proxies `/api` (`proxy.conf.json`).
 
-- [ ] **Deliverables:** create a screenshot job, run a dry run, review it in the grid.
+- [x] **Deliverables:** create a screenshot job, run a dry run, review it in the grid.
 
-- [ ] **Tests:** component tests for review grid and generated form; one Playwright smoke test (create job → dry run → grid shows items).
+- [x] **Tests:** component tests for review grid and generated form; one Playwright smoke test (create job → dry run → grid shows items).
+  - Note: Vitest component tests (22): review grid (paging, chips, filter/sort reloads, toggle + revert, bulk), generated form (schema → field types, rendering, model binding, limits), error interceptor (validation pass-through, retry), SSE wrapper, shell. Playwright (`frontend/e2e`, CI job `ui-e2e`): real backend + production build + fake Immich serving 30× the anonymised real-library sample → 29,970 assets, 2,910 candidates; plus a server field-error test.
 
-- [ ] **Done when:** the review grid scrolls smoothly through several thousand candidates.
+- [x] **Done when:** the review grid scrolls smoothly through several thousand candidates.
+  - Note: Playwright scrolls all 2,910 candidates (863 frames at 150 px/frame ≈ 9,000 px/s): average 16.7 ms per frame (60 fps), p95 ≈ 23–26 ms, ≤ 200 cards in the DOM; asserted in CI (avg < 33 ms). The test serves raster (PNG) thumbnails like Immich's; SVG thumbnails rasterise on the main thread and were the only cause of dropped frames.
 
 ---
 

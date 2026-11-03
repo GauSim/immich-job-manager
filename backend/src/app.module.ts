@@ -1,4 +1,7 @@
-import { DynamicModule, Module } from '@nestjs/common';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { DynamicModule, Logger, Module } from '@nestjs/common';
+import { ServeStaticModule } from '@nestjs/serve-static';
 import { ApiModule } from './api/api.module.js';
 import { ConfigModule } from './config/config.module.js';
 import type { AppConfig } from './config/config.schema.js';
@@ -24,7 +27,27 @@ export class AppModule {
         JobTypesModule,
         HealthModule,
         ApiModule,
+        ...staticFiles(config.publicDir),
       ],
     };
   }
+}
+
+/**
+ * Serves the Angular build with SPA fallback (unknown paths → index.html).
+ * `/api/*` is excluded, so unknown API routes stay JSON 404s.
+ */
+function staticFiles(publicDir: string): DynamicModule[] {
+  if (!existsSync(join(publicDir, 'index.html'))) {
+    new Logger('Static').warn(
+      `No UI build in ${publicDir}; serving the API only`,
+    );
+    return [];
+  }
+  return [
+    ServeStaticModule.forRoot({
+      rootPath: publicDir,
+      exclude: ['/api/{*path}'],
+    }),
+  ];
 }

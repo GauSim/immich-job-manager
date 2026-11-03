@@ -41,7 +41,7 @@ Run in the package directory:
 | lint | `npm run lint` | `npm run lint` |
 | format | `npm run format` / `format:check` | `npm run format` / `format:check` |
 | typecheck | `npm run typecheck` (incl. tests) | (part of build) |
-| test | `npm test`, `npm run test:e2e` | `npm test` |
+| test | `npm test`, `npm run test:e2e` | `npm test`; UI e2e: `npm run e2e:prepare && npm run e2e` (Playwright) |
 | build | `npm run build` | `npm run build` |
 
 Migrations: see `backend/README.md` (generate after every entity change; register in `migrations/index.ts`).
@@ -59,3 +59,5 @@ Before committing, run lint, format check, typecheck, tests and build for every 
 - All HTTP routes under `/api`.
 - No secrets in the repo, DB or browser; secrets come from `*_FILE` env vars / Docker secrets.
 - New config → `.env.example` and README.
+- Frontend: standalone components + signals, lazy routes; job params UI is generated from the job type's JSON Schema (never hand-write per-type forms). Formly is provided on the job-editor routes only (keeps the initial bundle small). Use `data-testid` for elements the Playwright tests use.
+- Don't run `pkill -f`/`pgrep -f` with a pattern that also appears in the same shell command (the tool's shell wrapper contains the command text and gets killed).

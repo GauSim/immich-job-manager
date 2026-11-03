@@ -1,0 +1,56 @@
+.immich-card {
+  margin-bottom: 16px;
+}
+.immich {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  .title {
+    font: var(--mat-sys-title-small);
+  }
+  .up {
+    color: #2e9d48;
+  }
+  .down,
+  .incompatible {
+    color: var(--mat-sys-error);
+  }
+}
+.small {
+  font: var(--mat-sys-body-small);
+}
+.table-wrap {
+  overflow-x: auto;
+}
+.jobs {
+  width: 100%;
+}
+.job-name {
+  font: var(--mat-sys-title-small);
+  color: var(--mat-sys-primary);
+  text-decoration: none;
+}
+.last-run {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-decoration: none;
+}
+.actions {
+  text-align: right;
+  white-space: nowrap;
+  button + button {
+    margin-left: 8px;
+  }
+}
+.empty {
+  text-align: center;
+  padding: 48px 16px;
+  mat-icon {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+    color: var(--mat-sys-outline);
+  }
+}

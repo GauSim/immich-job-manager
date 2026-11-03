@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { z } from 'zod';
 
 /** Validated runtime configuration. Built once at boot from the environment. */
@@ -15,6 +16,8 @@ export interface AppConfig {
   };
   pyWorkerUrl?: string;
   dataDir: string;
+  /** Angular build to serve; skipped when the directory does not exist. */
+  publicDir: string;
   maxConcurrentRuns: number;
   maxFileReads: number;
   port: number;
@@ -84,6 +87,7 @@ const envSchema = z.object({
   ),
   PY_WORKER_URL: z.preprocess(emptyToUndefined, httpUrl.optional()),
   DATA_DIR: z.preprocess(emptyToUndefined, z.string().default('/data')),
+  PUBLIC_DIR: z.preprocess(emptyToUndefined, z.string().default('public')),
   MAX_CONCURRENT_RUNS: intWithDefault(2, 1, 16),
   MAX_FILE_READS: intWithDefault(4, 1, 32),
   PORT: intWithDefault(3000, 1, 65535),
@@ -188,6 +192,7 @@ export function loadConfig(
     auth: { mode: e.AUTH_MODE, password },
     pyWorkerUrl: e.PY_WORKER_URL,
     dataDir: e.DATA_DIR,
+    publicDir: resolve(e.PUBLIC_DIR),
     maxConcurrentRuns: e.MAX_CONCURRENT_RUNS,
     maxFileReads: e.MAX_FILE_READS,
     port: e.PORT,

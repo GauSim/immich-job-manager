@@ -1,0 +1,103 @@
+@if (run(); as r) {
+  <div class="page-header">
+    <a
+      matIconButton
+      [routerLink]="job() ? ['/jobs', job()!.id] : ['/jobs']"
+      aria-label="Back to job"
+    >
+      <mat-icon>arrow_back</mat-icon>
+    </a>
+    <h1>
+      {{ job()?.name ?? 'Run' }} <span class="muted">· {{ r.dryRun ? 'dry run' : 'run' }}</span>
+    </h1>
+    <app-status-chip [status]="r.status" data-testid="run-status" />
+    @if (active()) {
+      <button matButton="outlined" [disabled]="acting()" (click)="cancel()">Cancel</button>
+    }
+    @if (r.status === 'interrupted' || r.status === 'failed') {
+      <button matButton="filled" [disabled]="acting()" (click)="resume()">Resume</button>
+    }
+  </div>
+
+  <mat-progress-bar
+    [mode]="active() ? 'indeterminate' : 'determinate'"
+    [value]="r.status === 'succeeded' ? 100 : 0"
+  />
+
+  <div class="totals">
+    <div class="tile">
+      <span class="value" data-testid="scanned">{{ r.scanned }}</span
+      ><span>scanned</span>
+    </div>
+    <div class="tile">
+      <span class="value" data-testid="matched">{{ r.matched }}</span
+      ><span>matched</span>
+    </div>
+    @if (!r.dryRun) {
+      <div class="tile">
+        <span class="value">{{ r.added }}</span
+        ><span>added</span>
+      </div>
+      <div class="tile">
+        <span class="value">{{ r.removed }}</span
+        ><span>removed</span>
+      </div>
+    }
+    @if (r.filesRead || r.cacheHits) {
+      <div class="tile">
+        <span class="value">{{ r.filesRead }}</span
+        ><span>files read</span>
+      </div>
+      <div class="tile">
+        <span class="value">{{ r.cacheHits }}</span
+        ><span>cache hits</span>
+      </div>
+    }
+    <div class="tile">
+      <span class="value">{{ elapsed() || '–' }}</span
+      ><span>duration</span>
+    </div>
+    <div class="meta muted">
+      @if (startedAt()) {
+        Started {{ startedAt() }}
+      }
+      @if (r.fullRescan) {
+        · full rescan
+      }
+    </div>
+  </div>
+
+  @if (r.error) {
+    <mat-card appearance="outlined" class="error-card">
+      <mat-card-content
+        ><mat-icon>error</mat-icon><span>{{ r.error }}</span></mat-card-content
+      >
+    </mat-card>
+  }
+
+  <details class="log" [open]="active() || !r.dryRun || r.status !== 'succeeded'">
+    <summary>Log ({{ logs().length }})</summary>
+    <div class="log-box" #logBox>
+      @for (l of logs(); track l.id) {
+        <div class="line" [class]="'line ' + l.level">
+          <span class="ts">{{ time(l.ts) }}</span
+          ><span class="lvl">{{ l.level }}</span
+          ><span>{{ l.message }}</span>
+        </div>
+      } @empty {
+        <div class="muted">No log lines yet.</div>
+      }
+    </div>
+  </details>
+
+  @if (r.dryRun) {
+    <h2 class="section">Review candidates</h2>
+    @if (active()) {
+      <p class="muted">Candidates can be reviewed when the run has finished.</p>
+    } @else {
+      <app-review-grid [runId]="r.id" [albumName]="job()?.targetAlbumName ?? ''" />
+    }
+  }
+} @else {
+  <mat-progress-bar mode="indeterminate" />
+}

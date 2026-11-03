@@ -37,3 +37,27 @@ body {
   height: 100%;
 }
 /* You can add global styles to this file, and also import other style files */
+
+/* Shared page helpers */
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  h1 {
+    font: var(--mat-sys-headline-small);
+    margin: 0;
+    flex: 1;
+  }
+}
+.muted {
+  color: var(--mat-sys-on-surface-variant);
+}
+.card-grid {
+  display: grid;
+  gap: 16px;
+}
+.error-text {
+  color: var(--mat-sys-error);
+}

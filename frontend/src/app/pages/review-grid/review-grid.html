@@ -1,0 +1,94 @@
+<div class="toolbar">
+  <mat-chip-listbox
+    aria-label="Filter candidates"
+    [value]="filter()"
+    (change)="setFilter($event.value)"
+    [hideSingleSelectionIndicator]="true"
+  >
+    <mat-chip-option value="all" data-testid="chip-all"
+      >All ({{ summary()?.all ?? 0 }})</mat-chip-option
+    >
+    <mat-chip-option value="high"
+      >Score ≥ {{ highScore }} ({{ summary()?.high ?? 0 }})</mat-chip-option
+    >
+    <mat-chip-option value="medium"
+      >Below {{ highScore }} ({{ summary()?.medium ?? 0 }})</mat-chip-option
+    >
+    <mat-chip-option value="unticked">Unticked ({{ summary()?.unselected ?? 0 }})</mat-chip-option>
+  </mat-chip-listbox>
+  <span class="spacer"></span>
+  <mat-form-field class="sort" subscriptSizing="dynamic">
+    <mat-label>Sort</mat-label>
+    <mat-select [value]="sort()" (valueChange)="sort.set($event)">
+      <mat-option value="-score">Score, high → low</mat-option>
+      <mat-option value="score">Score, low → high</mat-option>
+      <mat-option value="name">File name</mat-option>
+    </mat-select>
+  </mat-form-field>
+  <button matButton (click)="setAll(true)" [disabled]="!items().length" matTooltip="Tick all shown">
+    Tick all
+  </button>
+  <button
+    matButton
+    (click)="setAll(false)"
+    [disabled]="!items().length"
+    matTooltip="Untick all shown"
+  >
+    Untick all
+  </button>
+  <button
+    matButton="filled"
+    (click)="apply()"
+    [disabled]="!summary()?.selected"
+    data-testid="apply"
+  >
+    Apply to album<mat-icon iconPositionEnd>chevron_right</mat-icon>
+  </button>
+</div>
+
+@if (loading()) {
+  <mat-progress-bar mode="indeterminate" />
+}
+
+@if (!loading() && items().length === 0) {
+  <p class="muted empty">No candidates{{ filter() === 'all' ? '' : ' for this filter' }}.</p>
+} @else {
+  <cdk-virtual-scroll-viewport
+    class="viewport"
+    [itemSize]="rowHeight"
+    minBufferPx="600"
+    maxBufferPx="1200"
+  >
+    <div
+      *cdkVirtualFor="let row of rows(); trackBy: trackRow"
+      class="row"
+      [style.height.px]="rowHeight"
+    >
+      @for (c of row; track c.assetId) {
+        <div class="card" [class.unticked]="!c.selected" data-testid="candidate">
+          <div class="card-top">
+            <input
+              type="checkbox"
+              class="check"
+              [checked]="c.selected"
+              (change)="toggle(c)"
+              [attr.aria-label]="'Include ' + (c.originalFileName ?? c.assetId)"
+            />
+            <span class="score" [class.high]="c.score >= highScore">{{ c.score }}</span>
+          </div>
+          <img
+            [src]="thumbnail(c)"
+            loading="lazy"
+            decoding="async"
+            [alt]="c.originalFileName ?? ''"
+            class="thumb"
+          />
+          <div class="name" [title]="c.originalFileName ?? c.assetId">
+            {{ c.originalFileName ?? c.assetId }}
+          </div>
+          <div class="reasons">{{ c.reasons.join(' · ') }}</div>
+        </div>
+      }
+    </div>
+  </cdk-virtual-scroll-viewport>
+}
