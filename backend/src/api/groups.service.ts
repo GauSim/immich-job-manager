@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { AssetIndexService } from '../asset-index/asset-index.service.js';
+import { Clock } from '../core/clock.js';
 import { isGroupJobType } from '../core/job-type.js';
 import { JobTypeRegistry } from '../core/job-type.registry.js';
 import {
@@ -33,6 +34,7 @@ export class GroupsService {
     private readonly registry: JobTypeRegistry,
     private readonly index: AssetIndexService,
     private readonly immich: ImmichClient,
+    private readonly clock: Clock,
   ) {}
 
   async runGroups(runId: string): Promise<RunGroupsResponse> {
@@ -102,7 +104,7 @@ export class GroupsService {
       params: parsed.data,
       index: this.index.read(type.indexFilter(parsed.data, ownerId)),
       ownerId,
-      now: new Date(),
+      now: this.clock.now(),
     });
   }
 }

@@ -140,7 +140,7 @@ test('sign-in: wrong password, then sign in and out', async ({ page }) => {
   await page.getByTestId('password').fill('e2e');
   await page.getByTestId('login').click();
   await expect(page).toHaveURL(/\/settings$/);
-  await expect(page.getByTestId('app-version')).toHaveText('1.0.0');
+  await expect(page.getByTestId('app-version')).toHaveText('1.1.0');
   await page.getByTestId('logout').click();
   await expect(page).toHaveURL(/\/login/);
   await page.goto('/jobs');

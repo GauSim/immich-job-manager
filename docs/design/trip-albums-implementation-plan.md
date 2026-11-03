@@ -11,7 +11,7 @@
 
 ## 1. Summary
 
-Seven phases, prefixed **T** so they don't clash with the v1 plan. Detection (T2) is pure code and is tuned on real data **before** any album is written. Trip albums are **usable after T5** (manual dry run + apply). They are **fully automated after T6** (scheduled, incremental, partner assets).
+Seven phases, prefixed **T** so they don't clash with the v1 plan. **Status (2026-11-03): T0, T1, T5 done; T2–T4 and T6 implemented and verified against a fake Immich, pending checks on the real library (see each phase).** Detection (T2) is pure code and is tuned on real data **before** any album is written. Trip albums are **usable after T5** (manual dry run + apply). They are **fully automated after T6** (scheduled, incremental, partner assets).
 
 | Phase | Goal | Depends on | Size | Milestone |
 | --- | --- | --- | --- | --- |
@@ -257,21 +257,40 @@ Tasks:
 
 **Goal:** configure once, runs by itself (SDD §5.6, §5.7, §7.3).
 
-**Status:** not started
+**Status:** implemented (2026-11-03) – version 1.1.0; verified against a fake Immich (time-travel e2e, scheduled runs, 95k-asset scale test); pending: a week of scheduled runs on the real library, pushing the `v1.1.0` tag
 
 Tasks:
 
-- [ ] Scheduled runs for group jobs via `JobScheduler`: nightly incremental, weekly full index refresh.
+- [x] Scheduled runs for group jobs via `JobScheduler`: nightly incremental, weekly full index refresh.
   - Note (T1): every scheduled run refreshes the index in full; no separate weekly refresh.
-- [ ] Ongoing trips: created when qualified, grow per run, return transit applied once home (fixtures + contract test with time travel).
-- [ ] Late imports: closed trips pick up newly indexed assets.
-- [ ] Partner assets per T0 result (`fill` / `full` / `off`), or remove the param with a note.
-- [ ] Housekeeping: `run_group` retention like `run_candidate`; index rows of out-of-scope assets.
-- [ ] Scale test: 100k-asset index, grouping time and memory under `npm run test:scale`.
-- [ ] Docs: README section "Trip albums" (what it does, params, API key permissions incl. album update for rename), `.env.example` if new config, CLAUDE.md layout table.
-- [ ] Main plan backlog: link this plan.
+  - Note: no scheduler changes were needed; group jobs go through `RunLauncher` like asset jobs. Covered by `test/trip-automation.e2e-spec.ts` (a scheduled job creates the trip album by itself).
+- [x] Ongoing trips: created when qualified, grow per run, return transit applied once home (fixtures + contract test with time travel).
+  - Note: an injectable `Clock` (`src/core/clock.ts`) gives group runs and insights "now". The e2e test moves it through a trip:
+    - day 8: album created, status `ongoing`;
+    - three more days: the album grows;
+    - home: status `active`, the BER arrival photo included as a travel day, the end fixed.
+  - Against the fake Immich, not a real one (no throwaway Immich in the sandbox).
+- [x] Late imports: closed trips pick up newly indexed assets.
+  - Note: in the same test, a camera photo without GPS or time zone, imported after the trip closed, is added; a photo the user removed stays out.
+- [x] Partner assets per T0 result (`fill` / `full` / `off`), or remove the param with a note.
+  - Note: kept (implemented in T2/T3). End to end: `fill` adds the partner's timeline photos and never the archived ones, a partner-only trip creates no album, `off` ignores them.
+- [x] Housekeeping: `run_group` retention like `run_candidate`; index rows of out-of-scope assets.
+  - Note: `run_group` pruning was added in T3. Index rows need no housekeeping: the index holds the widest scope, and every run's full refresh deletes rows Immich no longer returns.
+- [x] Scale test: 100k-asset index, grouping time and memory under `npm run test:scale`.
+  - Note: `test/scale/trips.scale-spec.ts`: 94,900 photos over 10 years with 60 trips. Full dry run through the app 2.4 s (fake Immich), index read 0.3 s, detection 0.3 s, ≈ 70 MB heap for reader + detection; all 60 trips found.
+- [x] Docs: README section "Trip albums" (what it does, params, API key permissions incl. album update for rename), `.env.example` if new config, CLAUDE.md layout table.
+  - Note: README:
+    - setup step 7 and "How it works → Trip albums";
+    - key permissions `album.update` and `user.read`;
+    - API table;
+    - v1.1.0 note.
 
-- [ ] **Deliverables:** release with the trip job.
+    No new config (`.env.example` only bumps the image version). CLAUDE.md: group job conventions and the tuning CLI.
+- [x] Main plan backlog: link this plan.
+  - Note: linked since the design commit; now marked implemented in v1.1.0.
+
+- [x] **Deliverables:** release with the trip job.
+  - Note: version 1.1.0 in all packages, the compose default and the UI smoke test. Pushing the `v1.1.0` tag (publishes the image via `release.yml`) is left to the maintainer.
 
 - [ ] **Done when:** a scheduled trip job runs a week on the real library with no interaction: it creates an album for a new trip, extends it during the trip, and keeps manual edits.
 

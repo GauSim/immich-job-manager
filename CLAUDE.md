@@ -25,7 +25,7 @@ While implementing, **keep the implementation plan up to date**:
 
 | Path | What |
 | --- | --- |
-| `backend/` | NestJS 12, ESM (`.js` suffix in relative imports), Vitest, oxlint, Prettier |
+| `backend/` | NestJS 12, ESM (`.js` suffix in relative imports), Vitest, oxlint, Prettier. Trip detection: `src/jobs/trips/` (tuning CLI: `npm run trips:detect`) |
 | `frontend/` | Angular 22 standalone + signals, Angular Material, Vitest (`ng test`), angular-eslint |
 | `tools/immich-spike/` | API spike script (`@immich/sdk`), run against a real Immich |
 | `worker-py/` | Placeholder (phase 9) |
@@ -56,6 +56,7 @@ Before committing, run lint, format check, typecheck, tests and build for every 
 - Review generated migrations: for SQLite TypeORM often rebuilds tables (DROP + copy), which cascades deletes through foreign keys. Prefer hand-written `ALTER TABLE … ADD COLUMN`.
 - New job types: a provider with `@AlbumJobType()` implementing `JobType` (`src/core/job-type.ts`), listed in `JOB_TYPES` (`src/jobs/job-types.module.ts`). Use the blocks in `src/core/blocks/`; yield one page at a time.
 - Long-lived `AbortSignal`s (a run's) must not be passed straight to `fetch` for many requests: `ImmichClient` links a per-request signal (`linkSignal`) and releases it. Reuse option objects for libraries that cache per options instance (e.g. `exifr`).
+- Group job types (one album per group, e.g. trip albums): a provider with `@AlbumJobType()` implementing `GroupJobType` (`kind: 'groups'`). `group()` is pure over the asset index (`src/asset-index/`), whose refresh, reconcile (`src/groups/`) and album sync (`GroupAlbumSync` in `src/sync/`) are core code. Membership and ownership live in `job_group_asset`; manual edits in Immich always win. Use the injected `Clock` for "now".
 - Runs are created only through `RunLauncher` (`src/runner/run-launcher.ts`): it decides full vs. incremental and enforces one active run per job. Schedules live in `JobScheduler`; call `sync()`/`remove()` when a job changes.
 - Album writes go through `AlbumSyncService` (`src/sync/`); only assets recorded in `job_asset` (owned) may ever be removed. Dry runs must never change Immich.
 - Config comes from the injected `APP_CONFIG` (`AppConfig`), never `process.env` outside `config/` and `main.ts`.

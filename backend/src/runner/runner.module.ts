@@ -4,6 +4,7 @@ import type { AppConfig } from '../config/config.schema.js';
 import { AssetIndexModule } from '../asset-index/asset-index.service.js';
 import { GroupsModule } from '../groups/group-store.js';
 import { GroupRunExecutor } from './group-run.js';
+import { Clock } from '../core/clock.js';
 import { RunExecutor } from './run-executor.js';
 import { RunQueue } from './run-queue.js';
 import { RunLifecycle } from './run-lifecycle.js';
@@ -13,6 +14,7 @@ import { RunLauncher } from './run-launcher.js';
 @Module({
   imports: [AssetIndexModule, GroupsModule],
   providers: [
+    Clock,
     RunStore,
     GroupRunExecutor,
     RunExecutor,
@@ -25,6 +27,6 @@ import { RunLauncher } from './run-launcher.js';
     RunLifecycle,
     RunLauncher,
   ],
-  exports: [RunQueue, RunStore, RunLauncher],
+  exports: [Clock, RunQueue, RunStore, RunLauncher],
 })
 export class RunnerModule {}
