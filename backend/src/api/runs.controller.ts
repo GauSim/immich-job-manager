@@ -27,7 +27,13 @@ import {
   type CandidateSummary,
   type CandidateView,
 } from './candidates.service.js';
-import { CandidateQuery, LogQuery, UpdateCandidatesDto } from './dto.js';
+import {
+  CandidateQuery,
+  LogQuery,
+  UpdateCandidatesDto,
+  UpdateRunGroupsDto,
+} from './dto.js';
+import { GroupsService, type RunGroupsResponse } from './groups.service.js';
 import { RunsService } from './runs.service.js';
 import {
   ApplyService,
@@ -46,6 +52,7 @@ export class RunsController {
     private readonly events: RunEventsService,
     private readonly candidates: CandidatesService,
     private readonly applyService: ApplyService,
+    private readonly groups: GroupsService,
   ) {}
 
   /** Dry run: counts for the apply confirmation (read-only). */
@@ -72,6 +79,23 @@ export class RunsController {
     summary: CandidateSummary;
   }> {
     return this.candidates.list(id, query);
+  }
+
+  /** Group job dry run: proposed groups (e.g. trips) with their action. */
+  @Get(':id/groups')
+  listGroups(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<RunGroupsResponse> {
+    return this.groups.runGroups(id);
+  }
+
+  /** Group job dry run: tick/untick proposed groups. */
+  @Patch(':id/groups')
+  updateGroups(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(UpdateRunGroupsDto)) dto: UpdateRunGroupsDto,
+  ): Promise<RunGroupsResponse & { updated: number }> {
+    return this.groups.selectRunGroups(id, dto);
   }
 
   /** Dry run: tick/untick by `assetIds` or by `filter`. */

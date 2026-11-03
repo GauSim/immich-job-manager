@@ -104,6 +104,37 @@ export class RunStore {
     });
   }
 
+  /** Group runs: one index page refreshed (adds to `scanned`, saves the cursor). */
+  persistIndexPage(
+    runId: string,
+    scanned: number,
+    cursor: string | null,
+  ): RunTotals {
+    const row = this.sqlite.db
+      .prepare(
+        `UPDATE job_run SET scanned = scanned + ?, cursor = ? WHERE id = ? ${RETURNING_TOTALS}`,
+      )
+      .get(scanned, cursor, runId) as Record<string, number> | undefined;
+    return toTotals(row, runId);
+  }
+
+  /** Sets the cursor only (e.g. a group run's "index complete" marker). */
+  setCursor(runId: string, cursor: string | null): void {
+    this.sqlite.db
+      .prepare('UPDATE job_run SET cursor = ? WHERE id = ?')
+      .run(cursor, runId);
+  }
+
+  /** Group runs: total assets in the proposed groups. */
+  setMatched(runId: string, matched: number): RunTotals {
+    const row = this.sqlite.db
+      .prepare(
+        `UPDATE job_run SET matched = ? WHERE id = ? ${RETURNING_TOTALS}`,
+      )
+      .get(matched, runId) as Record<string, number> | undefined;
+    return toTotals(row, runId);
+  }
+
   /** Mirror mode: drops ownership of removed (and vanished) assets; counts `removed`. */
   recordRemovals(
     runId: string,

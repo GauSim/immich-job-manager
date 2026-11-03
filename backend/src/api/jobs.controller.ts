@@ -22,7 +22,10 @@ import {
   PageQuery,
   StartRunDto,
   UpdateJobDto,
+  UpdateJobGroupDto,
 } from './dto.js';
+import { GroupsService } from './groups.service.js';
+import type { JobGroupView } from '../groups/group-store.js';
 import {
   JobsService,
   type ImportResult,
@@ -46,6 +49,7 @@ export class JobsController {
   constructor(
     private readonly jobs: JobsService,
     private readonly runs: RunsService,
+    private readonly groups: GroupsService,
   ) {}
 
   @Get()
@@ -102,6 +106,28 @@ export class JobsController {
     @Body(new ZodPipe(StartRunDto)) dto: StartRunDto,
   ): Promise<JobRunEntity> {
     return this.runs.start(id, dto);
+  }
+
+  /** Group jobs: stored groups (e.g. trips) with their status and album. */
+  @Get(':id/groups')
+  listGroups(@Param('id', ParseUUIDPipe) id: string): Promise<JobGroupView[]> {
+    return this.groups.jobGroups(id);
+  }
+
+  /** Group jobs: ignore, lock or reactivate a stored group. */
+  @Patch(':id/groups/:groupId')
+  updateGroup(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Body(new ZodPipe(UpdateJobGroupDto)) dto: UpdateJobGroupDto,
+  ): Promise<JobGroupView> {
+    return this.groups.updateJobGroup(id, groupId, dto);
+  }
+
+  /** Group jobs: insights over the asset index (trip albums: inferred home per month). */
+  @Get(':id/insights')
+  insights(@Param('id', ParseUUIDPipe) id: string): Promise<unknown> {
+    return this.groups.insights(id);
   }
 
   @Get(':id/runs')

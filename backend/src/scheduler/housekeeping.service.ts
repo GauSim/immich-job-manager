@@ -76,6 +76,15 @@ export class Housekeeping
          )`,
       )
       .run(keep).changes;
+    // Group jobs: the proposed groups of the same old dry runs.
+    db.prepare(
+      `DELETE FROM run_group WHERE run_id IN (
+         SELECT id FROM (
+           SELECT id, ROW_NUMBER() OVER (PARTITION BY job_id ORDER BY created_at DESC) AS n
+           FROM job_run WHERE dry_run = 1 AND status NOT IN ('queued', 'running')
+         ) WHERE n > ?
+       )`,
+    ).run(keep);
     const prunedLogLines = db
       .prepare('DELETE FROM run_log WHERE ts < ?')
       .run(sqliteNow(new Date(now.getTime() - logDays * DAY_MS))).changes;

@@ -147,23 +147,40 @@ Tasks:
 
 **Goal:** the core can run a group job end to end as a dry run (SDD §3, §7.1, §7.2).
 
-**Status:** not started
+**Status:** implemented (2026-11-03) – verified end to end against a fake Immich; pending: a dry run over the real library
+
+- Note: started while T2's real-data tuning is still open (the user asked to continue). T3 does not depend on the tuned defaults.
 
 Tasks:
 
-- [ ] `core/job-type.ts`: `GroupJobType`, `GroupContext`, `ProposedGroup`, `AnyJobType`; `JobTypeRegistry` and `/api/job-types` expose `kind`.
-- [ ] Entities + hand-written migration `JobGroups`: `job_group`, `job_group_asset`, `run_group`, `run_candidate.group_key`.
-- [ ] `GroupReconciler` (pure): new / update / split / merge / orphan / ignored / locked (SDD §7.2).
-- [ ] `RunExecutor`: dispatch by `kind`; group run = index (resumable) → group → reconcile → dry run stores `run_group` + `run_candidate` (with `group_key`). Totals: indexed, trips found / new / updated / orphaned, assets matched.
-- [ ] `RunLauncher`: full vs. incremental for group jobs (index `since`; regrouping is always full); weekly full refresh (`fullRefreshEveryDays`).
+- [x] `core/job-type.ts`: `GroupJobType`, `GroupContext`, `ProposedGroup`, `AnyJobType`; `JobTypeRegistry` and `/api/job-types` expose `kind`.
+  - Note: `GroupJobType.indexFilter(params, ownerId)` replaces `indexScope()` (T1). Optional `insights()` serves the job page (trip albums: home per month). `isGroupJobType()` narrows the union.
+- [x] Entities + hand-written migration `JobGroups`: `job_group`, `job_group_asset`, `run_group`, `run_candidate.group_key`.
+  - Note: `JobGroups1793724000000`. Constraint names and column types are copied from a TypeORM-generated version; the generated version rebuilt `run_candidate`, so the new column is added in place instead.
+- [x] `GroupReconciler` (pure): new / update / split / merge / orphan / ignored / locked (SDD §7.2).
+  - Note: `src/groups/group-reconciler.ts`. Within each connected set of overlapping groups, pairs are matched greedily by shared assets, then by the stored group's owned assets. `locked` wins over `ignored`, and orphaned/merged groups come back when detected again.
+- [x] `RunExecutor`: dispatch by `kind`; group run = index (resumable) → group → reconcile → dry run stores `run_group` + `run_candidate` (with `group_key`). Totals: indexed, trips found / new / updated / orphaned, assets matched.
+  - Note: `GroupRunExecutor` (`src/runner/group-run.ts`). `scanned` = assets indexed, `matched` = assets in selectable groups; counts per action go to the run log (no new `job_run` columns). The cursor `index:done` marks a finished index refresh, so a resume skips it. The exclusion album is read (never created) and its assets are dropped from the proposals. `GroupStore` (`src/groups/group-store.ts`) holds the SQLite reads and writes.
+- [x] `RunLauncher`: full vs. incremental for group jobs (index `since`; regrouping is always full); weekly full refresh (`fullRefreshEveryDays`).
   - Note (T1): the index is always refreshed in full, so group runs need no incremental mode and no `fullRefreshEveryDays`. Pass the run's start as `startedAt` so resume works.
-- [ ] `TripAlbumsJob` (`@AlbumJobType()`, listed in `JOB_TYPES`) wiring T2 into `group()`.
-- [ ] API: `GET/PATCH /runs/:id/groups`, `GET /runs/:id/candidates?group=`, `GET /jobs/:id/groups`, `PATCH /jobs/:id/groups/:groupId`, `GET /jobs/:id/home`.
-- [ ] Job create/update: target album optional for group job types.
+  - Note: group runs are always planned as full. **Real runs of group jobs are refused (400) until T4**, and so is apply of their dry runs (409).
+- [x] `TripAlbumsJob` (`@AlbumJobType()`, listed in `JOB_TYPES`) wiring T2 into `group()`.
+  - Note: `src/jobs/trips/trip-albums.job.ts`. The `exclusionAlbum` param was dropped: group jobs use the job's existing exclusion album field (default `<job name> – excluded`).
+- [x] API: `GET/PATCH /runs/:id/groups`, `GET /runs/:id/candidates?group=`, `GET /jobs/:id/groups`, `PATCH /jobs/:id/groups/:groupId`, `GET /jobs/:id/home`.
+  - Note: `GET /jobs/:id/insights` instead of `/home` (generic; trip albums returns `{ home: [...] }`). `PATCH /runs/:id/groups` ticks `create`/`update` groups only. `GroupsService` in `src/api/`.
+- [x] Job create/update: target album optional for group job types.
+  - Note: `targetAlbumName` is optional in the DTO, still required for asset jobs (checked in `JobsService`), and refused for group jobs (stored as `''`). The export omits it for group jobs so they re-import.
+- Note: housekeeping also prunes `run_group` rows of old dry runs (same retention as candidates).
 
-- [ ] **Tests:** reconciler cases; executor dry run with a fake job type and fake Immich (no writes); resume during indexing; API e2e.
+- [x] **Tests:** reconciler cases; executor dry run with a fake job type and fake Immich (no writes); resume during indexing; API e2e.
+  - Note: 8 reconciler tests. `test/trips.e2e-spec.ts` (9 tests) runs the real trip job through the app against the fake Immich library instead of a fake job type:
+    - job type `kind`; creating jobs without a target album;
+    - a dry run with zero album writes, review list and candidates per group, exclusion album, tick/untick;
+    - real run and apply refused; update of a stored trip and `ignored`; insights;
+    - resume after a failure during indexing.
 
 - [ ] **Done when:** a dry run of the trip job over the real library stores the trip list, readable through the API, and makes zero Immich writes.
+  - Note: zero writes ✓ against the fake Immich. Pending: a dry run on the real instance (needs `user.read` on the app's API key).
 
 ---
 

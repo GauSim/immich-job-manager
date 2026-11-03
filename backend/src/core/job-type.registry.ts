@@ -2,10 +2,12 @@ import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { DiscoveryService } from '@nestjs/core';
 import { z } from 'zod';
 import { AlbumJobType } from './album-job-type.decorator.js';
-import type { JobType } from './job-type.js';
+import type { AnyJobType } from './job-type.js';
 
 export interface JobTypeInfo {
   id: string;
+  /** `assets`: one album per job; `groups`: one album per group (e.g. trip). */
+  kind: 'assets' | 'groups';
   name: string;
   description?: string;
   version: number;
@@ -25,7 +27,7 @@ export class UnknownJobTypeError extends Error {
 @Injectable()
 export class JobTypeRegistry implements OnModuleInit {
   private readonly logger = new Logger(JobTypeRegistry.name);
-  private readonly types = new Map<string, JobType>();
+  private readonly types = new Map<string, AnyJobType>();
 
   constructor(private readonly discovery: DiscoveryService) {}
 
@@ -33,7 +35,7 @@ export class JobTypeRegistry implements OnModuleInit {
     for (const wrapper of this.discovery.getProviders({
       metadataKey: AlbumJobType.KEY,
     })) {
-      const type = wrapper.instance as JobType | undefined;
+      const type = wrapper.instance as AnyJobType | undefined;
       if (!type) continue;
       this.register(type);
     }
@@ -42,7 +44,7 @@ export class JobTypeRegistry implements OnModuleInit {
     );
   }
 
-  register(type: JobType): void {
+  register(type: AnyJobType): void {
     if (this.types.has(type.id))
       throw new Error(`Duplicate job type id "${type.id}"`);
     // Fail at boot if the defaults don't satisfy the type's own schema.
@@ -54,7 +56,7 @@ export class JobTypeRegistry implements OnModuleInit {
     this.types.set(type.id, type);
   }
 
-  get(id: string): JobType {
+  get(id: string): AnyJobType {
     const type = this.types.get(id);
     if (!type) throw new UnknownJobTypeError(id);
     return type;
@@ -67,6 +69,7 @@ export class JobTypeRegistry implements OnModuleInit {
   list(): JobTypeInfo[] {
     return [...this.types.values()].map((t) => ({
       id: t.id,
+      kind: t.kind ?? 'assets',
       name: t.name,
       description: t.description,
       version: t.version,

@@ -127,11 +127,6 @@ export const TripParams = z.object({
     .enum(['auto', 'off'])
     .default('auto')
     .describe('Reuse an existing album that already covers a trip'),
-  exclusionAlbum: z
-    .string()
-    .min(1)
-    .default('Trips – excluded')
-    .describe('Assets in this album are never put into any trip album'),
   minimumYear: z
     .number()
     .int()

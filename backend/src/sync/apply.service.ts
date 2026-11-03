@@ -7,6 +7,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, type Repository } from 'typeorm';
 import { JobEntity, JobRunEntity } from '../persistence/entities/index.js';
+import { isGroupJobType } from '../core/job-type.js';
+import { JobTypeRegistry } from '../core/job-type.registry.js';
 import { RunStore, type RunTotals } from '../runner/run-store.js';
 import { AlbumSyncService } from './album-sync.service.js';
 import { JobLocks } from './job-locks.js';
@@ -45,6 +47,7 @@ export class ApplyService {
     private readonly sync: AlbumSyncService,
     private readonly store: RunStore,
     private readonly locks: JobLocks,
+    private readonly registry: JobTypeRegistry,
   ) {}
 
   /** Counts for the confirmation dialog. Read-only: does not create albums. */
@@ -118,6 +121,13 @@ export class ApplyService {
     const job = await this.jobs.findOneBy({ id: run.jobId });
     if (!job)
       throw new NotFoundException('The job of this run no longer exists');
+    if (
+      this.registry.has(job.typeId) &&
+      isGroupJobType(this.registry.get(job.typeId))
+    )
+      throw new ConflictException(
+        'Applying dry runs of group jobs (e.g. trip albums) is not available yet',
+      );
     return { run, job };
   }
 }

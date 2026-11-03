@@ -4,6 +4,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { isGroupJobType } from '../core/job-type.js';
 import { JobTypeRegistry } from '../core/job-type.registry.js';
 import type { JobEntity, RunTrigger } from '../persistence/entities/index.js';
 import { SqliteService, sqliteNow } from '../persistence/sqlite.service.js';
@@ -51,6 +52,13 @@ export class RunLauncher {
         since: null,
         reason: 'dry runs always scan the whole library',
       };
+    if (this.isGroupJob(job))
+      return {
+        dryRun,
+        full: true,
+        since: null,
+        reason: 'group jobs always refresh the whole index',
+      };
     if (options.fullRescan)
       return {
         dryRun,
@@ -85,6 +93,13 @@ export class RunLauncher {
     };
   }
 
+  private isGroupJob(job: JobEntity): boolean {
+    return (
+      this.registry.has(job.typeId) &&
+      isGroupJobType(this.registry.get(job.typeId))
+    );
+  }
+
   /** Creates a queued run; 409 if the job already has an active run or is being applied. */
   launch(
     job: JobEntity,
@@ -94,6 +109,11 @@ export class RunLauncher {
     if (!plan.dryRun && job.syncMode === 'dry-run') {
       throw new BadRequestException(
         'The job is in dry-run mode; change its sync mode to run it for real',
+      );
+    }
+    if (!plan.dryRun && this.isGroupJob(job)) {
+      throw new BadRequestException(
+        'Real runs of group jobs (e.g. trip albums) are not available yet; start a dry run',
       );
     }
     if (this.locks.isLocked(job.id)) {
