@@ -33,13 +33,15 @@
       <span class="value" data-testid="matched">{{ r.matched }}</span
       ><span>matched</span>
     </div>
-    @if (!r.dryRun) {
+    @if (!r.dryRun || r.appliedAt) {
       <div class="tile">
-        <span class="value">{{ r.added }}</span
+        <span class="value" data-testid="added">{{ r.added }}</span
         ><span>added</span>
       </div>
+    }
+    @if (!r.dryRun) {
       <div class="tile">
-        <span class="value">{{ r.removed }}</span
+        <span class="value" data-testid="removed">{{ r.removed }}</span
         ><span>removed</span>
       </div>
     }
@@ -63,6 +65,9 @@
       }
       @if (r.fullRescan) {
         · full rescan
+      }
+      @if (appliedAt()) {
+        <span data-testid="applied-at">· applied {{ appliedAt() }}</span>
       }
     </div>
   </div>
@@ -95,7 +100,11 @@
     @if (active()) {
       <p class="muted">Candidates can be reviewed when the run has finished.</p>
     } @else {
-      <app-review-grid [runId]="r.id" [albumName]="job()?.targetAlbumName ?? ''" />
+      <app-review-grid
+        [runId]="r.id"
+        [albumName]="job()?.targetAlbumName ?? ''"
+        (applied)="onApplied()"
+      />
     }
   }
 } @else {

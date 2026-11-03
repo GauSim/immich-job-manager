@@ -262,11 +262,11 @@ export class ImmichClient {
 
   // ---------------------------------------------------------------- albums
 
-  /** Finds an album owned by the API key's user by exact name, or creates it. */
-  async findOrCreateAlbum(
+  /** Finds an album owned by the API key's user by exact name; null if none. */
+  async findAlbum(
     name: string,
-    options: CallOptions & { description?: string } = {},
-  ): Promise<AlbumRef> {
+    options: CallOptions = {},
+  ): Promise<{ id: string; name: string } | null> {
     const albums = await this.call(
       'getAllAlbums',
       (o) => getAllAlbums({ name, isOwned: true }, o),
@@ -278,7 +278,16 @@ export class ImmichClient {
         `${matches.length} albums named "${name}" found; using ${matches[0].id}`,
       );
     }
-    if (matches.length > 0) return { id: matches[0].id, name, created: false };
+    return matches.length > 0 ? { id: matches[0].id, name } : null;
+  }
+
+  /** Finds an album owned by the API key's user by exact name, or creates it. */
+  async findOrCreateAlbum(
+    name: string,
+    options: CallOptions & { description?: string } = {},
+  ): Promise<AlbumRef> {
+    const existing = await this.findAlbum(name, options);
+    if (existing) return { ...existing, created: false };
 
     const created = await this.call(
       'createAlbum',

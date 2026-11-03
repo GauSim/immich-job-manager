@@ -11,6 +11,9 @@ export interface RecordedRequest {
   path: string;
   headers: IncomingMessage['headers'];
   body: unknown;
+  query?: URLSearchParams;
+  /** Regex groups for `onMatch` routes. */
+  params?: string[];
 }
 
 export interface CannedResponse {
@@ -33,6 +36,11 @@ export type Handler = (
 export class FakeImmichServer {
   readonly requests: RecordedRequest[] = [];
   private readonly routes = new Map<string, Handler>();
+  private readonly patterns: {
+    method: string;
+    re: RegExp;
+    handler: Handler;
+  }[] = [];
   private server?: Server;
   private correlationSeq = 0;
   inFlight = 0;
@@ -44,6 +52,17 @@ export class FakeImmichServer {
   on(route: string, handler: Handler): this {
     this.routes.set(route, handler);
     return this;
+  }
+
+  /** Route by method + regular expression on the path (after `/api`); `req.params` gets the groups. */
+  onMatch(method: string, re: RegExp, handler: Handler): this {
+    this.patterns.push({ method, re, handler });
+    return this;
+  }
+
+  /** Recorded requests whose method and path match. */
+  requestsMatching(method: string, re: RegExp): RecordedRequest[] {
+    return this.requests.filter((r) => r.method === method && re.test(r.path));
   }
 
   /** Answers the route with the given responses in order; the last one repeats. */
@@ -90,10 +109,22 @@ export class FakeImmichServer {
         path: url.pathname.replace(/^\/api/, ''),
         headers: req.headers,
         body: raw ? safeJson(raw) : undefined,
+        query: url.searchParams,
       };
       this.requests.push(recorded);
       res.setHeader('x-correlation-id', `corr-${++this.correlationSeq}`);
-      const handler = this.routes.get(`${recorded.method} ${recorded.path}`);
+      let handler = this.routes.get(`${recorded.method} ${recorded.path}`);
+      if (!handler) {
+        for (const p of this.patterns) {
+          const m =
+            p.method === recorded.method ? p.re.exec(recorded.path) : null;
+          if (m) {
+            recorded.params = m.slice(1);
+            handler = p.handler;
+            break;
+          }
+        }
+      }
       if (!handler) {
         res.statusCode = 404;
         res.end(JSON.stringify({ message: 'Not found' }));
@@ -169,6 +200,8 @@ export function serveLibrary(
       ? Array.from({ length: library }, (_, i) => fakeAsset(`asset-${i}`))
       : library;
   const count = assets.length;
+  // No albums yet: runs look up their target/exclusion albums (dry runs never create them).
+  server.on('GET /albums', () => ({ json: [] }));
   server.on('POST /search/metadata', async (req) => {
     const body = req.body as { cursor?: string; size?: number };
     const offset = body.cursor
@@ -190,4 +223,139 @@ export function serveLibrary(
         : null;
     return { json: searchResponse(items, next) };
   });
+}
+
+type FakeAsset = Record<string, unknown> & { id: string };
+
+/**
+ * A stateful fake Immich library: metadata search (incl. album members via
+ * `filter.albumIds.any`), albums (list by name, create) and album asset
+ * add/remove with Immich's per-id results. Tests mutate `assets` / `albums`.
+ */
+export class FakeImmichLibrary {
+  assets: FakeAsset[];
+  readonly albums = new Map<
+    string,
+    { albumName: string; members: Set<string> }
+  >();
+  private albumSeq = 0;
+
+  constructor(
+    private readonly server: FakeImmichServer,
+    assets: FakeAsset[],
+  ) {
+    this.assets = assets;
+    server.on('GET /server/version', () => ({
+      json: { major: 3, minor: 3, patch: 5 },
+    }));
+    server.on('POST /search/metadata', (req) => this.search(req));
+    server.on('GET /albums', (req) => {
+      const name = req.query?.get('name');
+      return {
+        json: [...this.albums.entries()]
+          .filter(([, a]) => !name || a.albumName.includes(name))
+          .map(([id, a]) => ({
+            id,
+            albumName: a.albumName,
+            assetCount: a.members.size,
+          })),
+      };
+    });
+    server.on('POST /albums', (req) => {
+      const { albumName } = req.body as { albumName: string };
+      return {
+        status: 201,
+        json: { id: this.addAlbum(albumName), albumName, assetCount: 0 },
+      };
+    });
+    server.onMatch('PUT', /^\/albums\/([^/]+)\/assets$/, (req) =>
+      this.write(req, 'add'),
+    );
+    server.onMatch('DELETE', /^\/albums\/([^/]+)\/assets$/, (req) =>
+      this.write(req, 'remove'),
+    );
+  }
+
+  addAlbum(name: string, members: string[] = []): string {
+    const id = `00000000-0000-4000-8000-${String(++this.albumSeq).padStart(12, '0')}`;
+    this.albums.set(id, { albumName: name, members: new Set(members) });
+    return id;
+  }
+
+  album(name: string) {
+    return [...this.albums.values()].find((a) => a.albumName === name);
+  }
+
+  members(name: string): string[] {
+    return [...(this.album(name)?.members ?? [])].sort();
+  }
+
+  /** Album write calls (PUT/DELETE /albums/:id/assets) so far. */
+  writeCalls(): number {
+    return (
+      this.server.requestsMatching('PUT', /^\/albums\/[^/]+\/assets$/).length +
+      this.server.requestsMatching('DELETE', /^\/albums\/[^/]+\/assets$/).length
+    );
+  }
+
+  private search(req: RecordedRequest): CannedResponse {
+    const body = req.body as {
+      cursor?: string;
+      size?: number;
+      filter?: { albumIds?: { any?: string[] } };
+    };
+    const albumIds = body.filter?.albumIds?.any;
+    const source = albumIds
+      ? this.assets
+          .filter((a) =>
+            albumIds.some((id) => this.albums.get(id)?.members.has(a.id)),
+          )
+          .concat(
+            // Members unknown to the library (e.g. added by hand in tests) still count.
+            albumIds.flatMap((id) =>
+              [...(this.albums.get(id)?.members ?? [])]
+                .filter((m) => !this.assets.some((a) => a.id === m))
+                .map((m) => fakeAsset(m)),
+            ),
+          )
+      : this.assets;
+    const offset = body.cursor
+      ? (
+          JSON.parse(Buffer.from(body.cursor, 'base64').toString()) as {
+            offset: number;
+          }
+        ).offset
+      : 0;
+    const size = body.size ?? 1000;
+    const items = source.slice(offset, offset + size);
+    const next =
+      offset + size < source.length
+        ? Buffer.from(JSON.stringify({ offset: offset + size })).toString(
+            'base64',
+          )
+        : null;
+    return { json: searchResponse(items, next) };
+  }
+
+  private write(req: RecordedRequest, op: 'add' | 'remove'): CannedResponse {
+    const album = this.albums.get(req.params![0]);
+    if (!album) return { status: 400, json: { message: 'Album not found' } };
+    const known = new Set(this.assets.map((a) => a.id));
+    const ids = (req.body as { ids: string[] }).ids;
+    return {
+      json: ids.map((id) => {
+        if (op === 'add') {
+          if (!known.has(id))
+            return { id, success: false, error: 'no_permission' };
+          if (album.members.has(id))
+            return { id, success: false, error: 'duplicate' };
+          album.members.add(id);
+          return { id, success: true };
+        }
+        return album.members.delete(id)
+          ? { id, success: true }
+          : { id, success: false, error: 'not_found' };
+      }),
+    };
+  }
 }

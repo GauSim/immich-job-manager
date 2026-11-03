@@ -87,4 +87,8 @@ export class JobRunEntity {
 
   @Column('text', { nullable: true })
   error: string | null;
+
+  /** Dry runs: when the selected candidates were last applied to the album. */
+  @Column('datetime', { nullable: true })
+  appliedAt: Date | null;
 }

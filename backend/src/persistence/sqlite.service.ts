@@ -3,6 +3,10 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import type { Database } from 'better-sqlite3';
 import { DataSource } from 'typeorm';
 
+/** Current time in TypeORM's SQLite datetime format (UTC, ms precision). */
+export const sqliteNow = (date = new Date()) =>
+  date.toISOString().replace('T', ' ').replace('Z', '');
+
 /**
  * Raw access to the better-sqlite3 handle for synchronous, atomic writes.
  *

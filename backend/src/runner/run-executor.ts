@@ -4,6 +4,7 @@ import type { Repository } from 'typeorm';
 import type { JobContext } from '../core/job-type.js';
 import { JobTypeRegistry } from '../core/job-type.registry.js';
 import { RunEventsService } from '../events/run-events.service.js';
+import { AlbumSyncService } from '../sync/album-sync.service.js';
 import { ImmichClient } from '../immich/immich.client.js';
 import {
   JobEntity,
@@ -34,6 +35,7 @@ export class RunExecutor {
     private readonly registry: JobTypeRegistry,
     private readonly immich: ImmichClient,
     private readonly events: RunEventsService,
+    private readonly albumSync: AlbumSyncService,
   ) {}
 
   async execute(runId: string, signal: AbortSignal): Promise<void> {
@@ -76,11 +78,19 @@ export class RunExecutor {
           ? `Resuming ${mode} of "${job.name}" (${type.id} v${type.version})`
           : `Starting ${mode} of "${job.name}" (${type.id} v${type.version})`,
       );
-      if (!run.dryRun) {
-        log.warn(
-          'Album sync is not implemented yet (phase 5): this run only counts matches; nothing is written to Immich.',
-        );
-      }
+
+      // Albums: dry runs only read (exclusions), real runs find or create them.
+      const albums = await this.albumSync.resolve(job, {
+        create: !run.dryRun,
+        signal,
+      });
+      log.info(
+        `Album "${albums.targetName}": ${albums.target ? `${albums.members.size} assets${albums.target.created ? ' (created)' : ''}` : 'does not exist yet'}; ` +
+          `exclusion album "${albums.exclusionName}": ${albums.exclusion ? `${albums.excluded.size} assets${albums.exclusion.created ? ' (created)' : ''}` : 'does not exist yet'}`,
+      );
+      const mirror = !run.dryRun && job.syncMode === 'mirror';
+      const matches = new Set<string>();
+      const sync = { excluded: 0, alreadyInAlbum: 0, failed: 0 };
 
       const ctx: JobContext<unknown> = {
         runId,
@@ -96,13 +106,75 @@ export class RunExecutor {
 
       for await (const batch of type.select(ctx)) {
         signal.throwIfAborted();
-        totals = this.store.persistPage(runId, batch, {
-          storeCandidates: run.dryRun,
-        });
+        // Excluded assets never count as matches (SDD §4.3).
+        const candidates = batch.candidates.filter(
+          (c) => !albums.excluded.has(c.assetId),
+        );
+        sync.excluded += batch.candidates.length - candidates.length;
+        let owned: { jobId: string; assetIds: string[] } | undefined;
+        if (!run.dryRun) {
+          // Write this page's new matches before its cursor is saved, so a
+          // resume can never skip unwritten matches.
+          const ids = candidates.map((c) => c.assetId);
+          if (mirror) for (const id of ids) matches.add(id);
+          const result = await this.albumSync.add(albums, ids, signal);
+          sync.alreadyInAlbum += result.alreadyInAlbum;
+          sync.failed += result.failed.length;
+          for (const f of result.failed.slice(0, 3)) {
+            log.warn(`Immich refused to add ${f.id} (${f.error})`);
+          }
+          owned = { jobId: job.id, assetIds: result.added };
+        }
+        totals = this.store.persistPage(
+          runId,
+          { ...batch, candidates },
+          { storeCandidates: run.dryRun, owned },
+        );
         this.events.progress(runId, totals);
       }
+
+      if (mirror) {
+        if (resumeFrom) {
+          log.warn(
+            'Mirror mode: removals skipped because this run was resumed (matches of earlier pages are unknown). Run a full rescan to remove.',
+          );
+        } else if (run.since) {
+          log.info('Mirror mode: removals only happen on full rescans');
+        } else {
+          const owned = this.store.ownedAssetIds(job.id);
+          const removal = await this.albumSync.removeOwnedNonMatches(
+            albums,
+            owned,
+            matches,
+            signal,
+          );
+          totals = this.store.recordRemovals(
+            runId,
+            job.id,
+            removal.removed,
+            removal.forgotten,
+          );
+          sync.failed += removal.failed.length;
+          if (removal.removed.length || removal.forgotten.length) {
+            log.info(
+              `Mirror mode: removed ${removal.removed.length} owned asset(s) that no longer match` +
+                (removal.forgotten.length
+                  ? `; ${removal.forgotten.length} were already removed by hand`
+                  : ''),
+            );
+          }
+          this.events.progress(runId, totals);
+        }
+      }
+
       log.info(
-        `Finished: ${totals?.scanned ?? 0} scanned, ${totals?.matched ?? 0} matched in ${seconds(startedAt)} s`,
+        `Finished: ${totals?.scanned ?? 0} scanned, ${totals?.matched ?? 0} matched` +
+          (run.dryRun
+            ? ''
+            : `, ${totals?.added ?? 0} added, ${totals?.removed ?? 0} removed, ${sync.alreadyInAlbum} already in album`) +
+          (sync.excluded ? `, ${sync.excluded} excluded` : '') +
+          (sync.failed ? `, ${sync.failed} refused by Immich` : '') +
+          ` in ${seconds(startedAt)} s`,
       );
     } catch (e) {
       const reason: unknown = signal.aborted ? signal.reason : undefined;

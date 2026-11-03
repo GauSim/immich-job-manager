@@ -2,7 +2,10 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import type { Candidate, CandidateSummary } from '../../core/models';
-import { columnsFor, ReviewGrid, toRows } from './review-grid';
+import { MatDialog } from '@angular/material/dialog';
+import { of } from 'rxjs';
+import type { ApplyResult } from '../../core/models';
+import { applyConfirmation, applyMessage, columnsFor, ReviewGrid, toRows } from './review-grid';
 
 const candidate = (i: number, over: Partial<Candidate> = {}): Candidate => ({
   assetId: `a${i}`,
@@ -33,9 +36,50 @@ describe('review grid helpers', () => {
   });
 });
 
+describe('apply confirmation', () => {
+  const preview = {
+    albumName: 'Screenshots',
+    albumExists: false,
+    exclusionAlbumName: 'Screenshots – excluded',
+  };
+
+  it('summarises what will be added', () => {
+    expect(
+      applyConfirmation({ ...preview, selected: 12, alreadyInAlbum: 2, excluded: 1, toAdd: 9 }),
+    ).toEqual({
+      title: 'Apply to album?',
+      message:
+        '9 assets will be added to "Screenshots" (new album).\n2 already in the album.\n1 skipped (in "Screenshots – excluded").\nNothing is removed.',
+      confirm: 'Add 9',
+    });
+  });
+
+  it('is information only when nothing would be added', () => {
+    expect(
+      applyConfirmation({
+        ...preview,
+        albumExists: true,
+        selected: 3,
+        alreadyInAlbum: 3,
+        excluded: 0,
+        toAdd: 0,
+      }),
+    ).toMatchObject({
+      infoOnly: true,
+    });
+  });
+
+  it('reports the result', () => {
+    expect(applyMessage({ albumName: 'S', added: 1, failed: 2 } as ApplyResult)).toBe(
+      'Added 1 asset to "S" (2 refused by Immich)',
+    );
+  });
+});
+
 describe('ReviewGrid', () => {
   let fixture: ComponentFixture<ReviewGrid>;
   let http: HttpTestingController;
+  let dialogAnswer = true;
 
   const el = () => fixture.nativeElement as HTMLElement;
   /** Protected signals of the component under test. */
@@ -51,7 +95,11 @@ describe('ReviewGrid', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ReviewGrid],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: MatDialog, useValue: { open: () => ({ afterClosed: () => of(dialogAnswer) }) } },
+      ],
     }).compileComponents();
     fixture = TestBed.createComponent(ReviewGrid);
     fixture.componentRef.setInput('runId', 'run-1');
@@ -149,5 +197,41 @@ describe('ReviewGrid', () => {
     expect(req.request.body).toEqual({ selected: false, filter: { maxScore: 0.8 } });
     req.flush({ updated: 1, summary: summary() });
     expect((component().items()[0] as Candidate).selected).toBe(false);
+  });
+
+  it('applies after confirmation and emits the result', () => {
+    flushAll();
+    dialogAnswer = true;
+    const emitted: ApplyResult[] = [];
+    fixture.componentInstance.applied.subscribe((r) => emitted.push(r));
+    fixture.componentInstance.apply();
+    http.expectOne('/api/runs/run-1/apply-preview').flush({
+      albumName: 'Screenshots',
+      albumExists: true,
+      exclusionAlbumName: 'x',
+      selected: 1500,
+      alreadyInAlbum: 0,
+      excluded: 0,
+      toAdd: 1500,
+    });
+    const req = http.expectOne({ method: 'POST', url: '/api/runs/run-1/apply' });
+    req.flush({ albumName: 'Screenshots', added: 1500, failed: 0 });
+    expect(emitted).toHaveLength(1);
+  });
+
+  it('does not apply when the dialog is cancelled', () => {
+    flushAll();
+    dialogAnswer = false;
+    fixture.componentInstance.apply();
+    http.expectOne('/api/runs/run-1/apply-preview').flush({
+      albumName: 'S',
+      albumExists: true,
+      exclusionAlbumName: 'x',
+      selected: 1,
+      alreadyInAlbum: 0,
+      excluded: 0,
+      toAdd: 1,
+    });
+    http.expectNone({ method: 'POST', url: '/api/runs/run-1/apply' });
   });
 });

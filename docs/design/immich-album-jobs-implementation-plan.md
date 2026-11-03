@@ -240,22 +240,30 @@ Tasks:
 
 **Goal:** real changes in Immich. **Milestone M2: screenshot album filled.**
 
-**Status:** not started
+**Status:** done (2026-11-03) – verified against a real throwaway Immich v3.3.5 (contract tests); pending: first real run on the real library
 
 Tasks:
 
-- [ ] `AlbumSyncService`: resolve/create target and exclusion albums; compute `toAdd = matches − members − excluded`; mirror: `toRemove = owned − matches`.
-- [ ] Write in chunks of 500; record `job_asset` ownership rows per successful id.
-- [ ] Sync modes `additive` and `mirror` in the runner (real runs).
-- [ ] Real runs store totals only, no `run_candidate` rows.
-- [ ] `POST /runs/:id/apply` for dry runs (selected candidates only).
-- [ ] UI: "Apply to album" with confirmation dialog showing counts; mirror-mode save confirmation.
+- [x] `AlbumSyncService`: resolve/create target and exclusion albums; compute `toAdd = matches − members − excluded`; mirror: `toRemove = owned − matches`.
+  - Note: albums are found by exact name among the key owner's albums and created on real runs/apply only (dry runs and the apply preview never change Immich; `ImmichClient.findAlbum` added). Resolved ids are stored on the job. Excluded assets are dropped from **all** runs, dry runs included (no longer counted as matches). Mirror also drops ownership of owned assets the user removed by hand. The API rejects an exclusion album equal to the target.
+- [x] Write in chunks of 500; record `job_asset` ownership rows per successful id.
+  - Note: each page's new matches are written to Immich *before* the page's cursor is saved, and ownership + totals + cursor go in one SQLite transaction. So a resumed run can never skip unwritten matches; the cost is ≤ one add call per page with new matches (~30 on a first 30k run instead of ~6), and zero on reruns. `duplicate`/`not_found` count as already done; refusals (`no_permission`) are logged and counted.
+- [x] Sync modes `additive` and `mirror` in the runner (real runs).
+  - Note: mirror removals happen only after a complete run that was **not resumed** (a resumed run doesn't know the matches of earlier pages → removals skipped with a warning) and not incremental (phase 7). Run log ends with added / removed / already in album / excluded / refused.
+- [x] Real runs store totals only, no `run_candidate` rows.
+- [x] `POST /runs/:id/apply` for dry runs (selected candidates only).
+  - Note: plus `GET /runs/:id/apply-preview` (read-only counts: selected, already in album, excluded, to add, album exists). Apply never removes, records ownership with `added_by_run_id` = the dry run, sets `job_run.applied_at` (migration `RunAppliedAt`) and is idempotent. 409 for real/unfinished runs or while the job has an active run; an in-process `JobLocks` keeps apply and runs of the same job apart.
+- [x] UI: "Apply to album" with confirmation dialog showing counts; mirror-mode save confirmation.
+  - Note: dialog shows "N assets will be added to "X" (new album)", already-in-album / excluded counts and "Nothing is removed"; snackbar with the result; run page shows added (and applied time) afterwards.
 
-- [ ] **Deliverables:** screenshots album in Immich, filled by an applied dry run or an additive run.
+- [x] **Deliverables:** screenshots album in Immich, filled by an applied dry run or an additive run.
+  - Note: verified against a real Immich v3.3.5 (contract tests) and in the UI (Playwright: apply 2,909 of 2,910, then an additive run adds the remaining 1).
 
-- [ ] **Tests:** sync diff (additive, mirror, ownership, exclusion, idempotent rerun = zero writes); contract test against a throwaway Immich v3 in CI.
+- [x] **Tests:** sync diff (additive, mirror, ownership, exclusion, idempotent rerun = zero writes); contract test against a throwaway Immich v3 in CI.
+  - Note: runner tests with an in-memory Immich (additive, idempotent rerun with zero writes, exclusion in real and dry runs, mirror keeps hand-added assets, additive never removes, resumed mirror skips removals, dry runs create nothing); API e2e on the real-library sample against a stateful fake Immich (incl. apply/preview/409s); contract tests (`npm run test:contract`, CI job `immich-contract` with Immich v3.3.5 in Docker, seeded via `tools/immich-spike`).
 
-- [ ] **Done when:** a second run without library changes makes zero album write calls; moving an asset to the exclusion album keeps it out after the next run.
+- [x] **Done when:** a second run without library changes makes zero album write calls; moving an asset to the exclusion album keeps it out after the next run.
+  - Note: asserted in e2e (counting album write calls) and in the contract test against a real Immich (rerun adds 0; an asset moved to the exclusion album stays out; mirror removes an owned non-match).
 
 ---
 
@@ -294,6 +302,7 @@ Tasks:
 
 - [ ] `SchedulerModule`: register enabled jobs' cron on boot and on job change, in `TZ`.
 - [ ] Incremental mode: `since = started_at` of the last successful run; `updatedAfter` filter.
+  - Note (phase 5): mirror removals are skipped on incremental runs (they need all matches); only full rescans remove.
 - [ ] Forced full rescan when a job type's `version` changes or the user clicks "Full rescan".
 - [ ] Skip a scheduled trigger if the job is already running.
 - [ ] Nightly housekeeping: prune candidates (keep last 5 dry runs per job), logs older than 30 days, `VACUUM` monthly.

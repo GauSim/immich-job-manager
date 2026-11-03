@@ -2,7 +2,7 @@
 
 Self-hosted companion app for [Immich](https://immich.app) v3: rerunnable, schedulable batch jobs that select assets (first job: screenshots) and keep them in an Immich album. Talks to Immich only through its REST API with a scoped API key.
 
-> Status: **phase 4** – web UI: jobs dashboard, job editor with generated parameter forms, live run page and a review grid for dry runs. Album writes arrive in phase 5.
+> Status: **phase 5** – album sync: real runs (additive / mirror) and applied dry runs keep an Immich album filled; the exclusion album keeps false positives out. Scheduling arrives in phase 7.
 
 ## Docs
 
@@ -81,6 +81,14 @@ All settings are environment variables, validated at boot; an invalid value stop
 
 Create the key in Immich (Account settings → API keys) with exactly: `server.about`, `asset.read`, `asset.view`, `asset.download`, `album.read`, `album.create`, `albumAsset.create`, `albumAsset.delete`. Details in [the API notes](docs/immich-api-notes.md#2-api-key-permissions).
 
+## How album sync works
+
+- **Dry run** (default for new jobs): computes and stores candidates, changes nothing in Immich. Review them in the UI, untick false positives, then **Apply to album**.
+- **Additive**: adds new matches to the target album, never removes.
+- **Mirror**: adds new matches and removes assets *this app added* that no longer match (only after a complete, non-resumed full run). Assets you add by hand are never removed.
+- **Exclusion album** (default `<target> – excluded`): move a false positive there in Immich and it stays out of all future runs.
+- Albums are found by name (or created on the first real run/apply). A rerun without library changes makes no write calls.
+
 ## API (so far)
 
 All under `/api`. Validation errors: `400 { message: "Validation failed", errors: [{ path, message }] }`.
@@ -98,6 +106,8 @@ All under `/api`. Validation errors: `400 { message: "Validation failed", errors
 | GET | `/runs/:id/events` | Server-sent events: `status`, `progress` (≤ 1/s), `log` |
 | GET | `/runs/:id/candidates` | Dry run: candidates (`?sort=-score\|score\|name&minScore=&maxScore=&selected=&limit=&offset=`) with summary counts |
 | PATCH | `/runs/:id/candidates` | Dry run: tick/untick `{ selected, assetIds }` or `{ selected, filter }` |
+| GET | `/runs/:id/apply-preview` | Dry run: what applying would do (read-only) |
+| POST | `/runs/:id/apply` | Dry run: add the selected candidates to the album (never removes) |
 | GET | `/assets/:id/thumbnail` | Thumbnail proxy (only assets seen in a run) |
 
 ```bash

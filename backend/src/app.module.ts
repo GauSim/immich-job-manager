@@ -11,6 +11,7 @@ import { ImmichModule } from './immich/immich.module.js';
 import { JobTypesModule } from './jobs/job-types.module.js';
 import { LoggingModule } from './logging/logging.module.js';
 import { PersistenceModule } from './persistence/persistence.module.js';
+import { SyncModule } from './sync/sync.module.js';
 
 @Module({})
 export class AppModule {
@@ -25,6 +26,7 @@ export class AppModule {
         ImmichModule,
         EventsModule,
         JobTypesModule,
+        SyncModule,
         HealthModule,
         ApiModule,
         ...staticFiles(config.publicDir),

@@ -83,6 +83,10 @@ function thumbnailPng(seed) {
   ]);
 }
 
+/** Albums: id → { albumName, members }. */
+const albums = new Map();
+const knownIds = new Set(library.map((a) => a.id));
+
 const json = (res, status, body) => {
   res.writeHead(status, { 'content-type': 'application/json', 'x-correlation-id': 'e2e' });
   res.end(JSON.stringify(body));
@@ -95,15 +99,54 @@ const immich = createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
     if (req.method === 'GET' && url.pathname === '/api/server/version')
       return json(res, 200, { major: 3, minor: 3, patch: 5 });
+    const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString() || '{}') : {};
+    if (req.method === 'GET' && url.pathname === '/api/albums') {
+      const name = url.searchParams.get('name');
+      return json(
+        res,
+        200,
+        [...albums.entries()]
+          .filter(([, a]) => !name || a.albumName.includes(name))
+          .map(([id, a]) => ({ id, albumName: a.albumName, assetCount: a.members.size })),
+      );
+    }
+    if (req.method === 'POST' && url.pathname === '/api/albums') {
+      const id = `00000000-0000-4000-8000-${String(albums.size + 1).padStart(12, '0')}`;
+      albums.set(id, { albumName: body.albumName, members: new Set() });
+      return json(res, 201, { id, albumName: body.albumName, assetCount: 0 });
+    }
+    const albumAssets = /^\/api\/albums\/([^/]+)\/assets$/.exec(url.pathname);
+    if (albumAssets && (req.method === 'PUT' || req.method === 'DELETE')) {
+      const album = albums.get(albumAssets[1]);
+      if (!album) return json(res, 400, { message: 'Album not found' });
+      return json(
+        res,
+        200,
+        body.ids.map((id) => {
+          if (req.method === 'PUT') {
+            if (!knownIds.has(id)) return { id, success: false, error: 'no_permission' };
+            if (album.members.has(id)) return { id, success: false, error: 'duplicate' };
+            album.members.add(id);
+            return { id, success: true };
+          }
+          return album.members.delete(id)
+            ? { id, success: true }
+            : { id, success: false, error: 'not_found' };
+        }),
+      );
+    }
     if (req.method === 'POST' && url.pathname === '/api/search/metadata') {
-      const body = JSON.parse(Buffer.concat(chunks).toString() || '{}');
+      const albumIds = body.filter?.albumIds?.any;
+      const source = albumIds
+        ? library.filter((a) => albumIds.some((id) => albums.get(id)?.members.has(a.id)))
+        : library;
       const offset = body.cursor
         ? JSON.parse(Buffer.from(body.cursor, 'base64').toString()).offset
         : 0;
       const size = body.size ?? 1000;
-      const items = library.slice(offset, offset + size);
+      const items = source.slice(offset, offset + size);
       const next =
-        offset + size < library.length
+        offset + size < source.length
           ? Buffer.from(JSON.stringify({ offset: offset + size })).toString('base64')
           : null;
       return json(res, 200, {

@@ -3,6 +3,8 @@ import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { SILENT_ERRORS } from './error.interceptor';
 import type {
+  ApplyPreview,
+  ApplyResult,
   Candidate,
   CandidateFilter,
   CandidateSort,
@@ -107,6 +109,14 @@ export class Api {
       `/api/runs/${runId}/candidates`,
       body,
     );
+  }
+
+  applyPreview(runId: string): Observable<ApplyPreview> {
+    return this.http.get<ApplyPreview>(`/api/runs/${runId}/apply-preview`);
+  }
+
+  apply(runId: string): Observable<ApplyResult> {
+    return this.http.post<ApplyResult>(`/api/runs/${runId}/apply`, {});
   }
 
   thumbnailUrl(assetId: string): string {

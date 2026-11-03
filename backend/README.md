@@ -13,6 +13,18 @@ npm run build
 
 Configuration: see the root README. `.env` in this directory is loaded automatically in development.
 
+## Contract tests (real Immich)
+
+Against a **throwaway** Immich v3 seeded with the spike fixtures (never your real library):
+
+```bash
+cd ../tools/immich-spike && npm run fixtures && IMMICH_URL=http://localhost:2283/api npm run seed
+cd ../../backend
+IMMICH_CONTRACT_URL=http://localhost:2283/api IMMICH_CONTRACT_KEY=$(cat ../tools/immich-spike/out/api-key) npm run test:contract
+```
+
+CI starts Immich from `.github/immich/docker-compose.yml` (job `immich-contract`).
+
 ## Database migrations
 
 SQLite via TypeORM; migrations run on boot, `synchronize` is off. After changing an entity:

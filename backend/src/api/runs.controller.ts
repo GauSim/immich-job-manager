@@ -29,6 +29,11 @@ import {
 } from './candidates.service.js';
 import { CandidateQuery, LogQuery, UpdateCandidatesDto } from './dto.js';
 import { RunsService } from './runs.service.js';
+import {
+  ApplyService,
+  type ApplyPreview,
+  type ApplyResult,
+} from '../sync/apply.service.js';
 import { ZodPipe } from './validation.js';
 
 /** SSE keep-alive comment interval (proxies drop idle connections). */
@@ -40,7 +45,21 @@ export class RunsController {
     private readonly runs: RunsService,
     private readonly events: RunEventsService,
     private readonly candidates: CandidatesService,
+    private readonly applyService: ApplyService,
   ) {}
+
+  /** Dry run: counts for the apply confirmation (read-only). */
+  @Get(':id/apply-preview')
+  applyPreview(@Param('id', ParseUUIDPipe) id: string): Promise<ApplyPreview> {
+    return this.applyService.preview(id);
+  }
+
+  /** Dry run: adds the selected candidates to the job's album. Never removes. */
+  @Post(':id/apply')
+  @HttpCode(200)
+  apply(@Param('id', ParseUUIDPipe) id: string): Promise<ApplyResult> {
+    return this.applyService.apply(id);
+  }
 
   /** Dry run: paged candidates (`?sort=-score|score|name&minScore=&maxScore=&selected=`). */
   @Get(':id/candidates')
