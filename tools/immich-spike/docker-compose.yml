@@ -1,0 +1,18 @@
+# Runs the API spike once against an existing Immich, without a console.
+#
+# 1. Copy spike.env.example to spike.env and fill in IMMICH_URL / IMMICH_API_KEY.
+# 2. Copy this folder to the NAS and create a Docker Compose project from it.
+# 3. Start it; it installs dependencies, runs `npm run spike` and exits.
+#    Output is in the container log, the report in out/spike-report.json.
+services:
+  spike:
+    image: node:22-alpine
+    working_dir: /spike
+    volumes:
+      - ./:/spike
+    env_file: spike.env
+    # lets IMMICH_URL=http://host.docker.internal:2283/api reach Immich on the NAS itself
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    command: sh -c "npm ci --no-audit --no-fund && npm run spike"
+    restart: "no"

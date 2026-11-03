@@ -36,7 +36,7 @@ import {
 
 const baseUrl = required('IMMICH_URL');
 const apiKey = required('IMMICH_API_KEY');
-const albumName = process.env.SPIKE_ALBUM_NAME ?? 'immich-album-jobs-spike';
+const albumName = process.env.SPIKE_ALBUM_NAME || 'immich-album-jobs-spike';
 
 const report: Record<string, unknown> = { baseUrl, startedAt: new Date().toISOString() };
 
@@ -291,7 +291,7 @@ async function main() {
 
   // 9. HTTP Range on originals
   const rangeAsset =
-    process.env.SPIKE_ASSET_ID ??
+    process.env.SPIKE_ASSET_ID ||
     items.find((a) => /^IMG_\d+\.PNG$/i.test(a.originalFileName))?.id ??
     items.find((a) => a.originalMimeType === 'image/png')?.id ??
     items[0]?.id;
