@@ -1,0 +1,40 @@
+services:
+  album-jobs:
+    build: .
+    image: immich-album-jobs:latest
+    container_name: immich_album_jobs
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file: .env
+    environment:
+      IMMICH_API_KEY_FILE: /run/secrets/immich_api_key
+      APP_PASSWORD_FILE: /run/secrets/app_password
+    volumes:
+      - ./data:/data
+    secrets: [immich_api_key, app_password]
+    networks: [immich]
+
+  # later, only with: docker compose --profile ml up -d
+  py-worker:
+    profiles: ["ml"]
+    build: ./worker-py
+    restart: unless-stopped
+    environment:
+      IMMICH_URL: http://immich_server:2283/api
+      IMMICH_API_KEY_FILE: /run/secrets/immich_api_key_readonly
+    secrets: [immich_api_key_readonly]
+    networks: [immich]
+
+networks:
+  immich:
+    external: true
+    name: immich_default   # check with: docker network ls
+
+secrets:
+  immich_api_key:
+    file: ./secrets/immich_api_key
+  immich_api_key_readonly:
+    file: ./secrets/immich_api_key_readonly
+  app_password:
+    file: ./secrets/app_password

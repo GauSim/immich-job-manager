@@ -1,0 +1,54 @@
+# CLAUDE.md
+
+Guidance for Claude Code when working in this repository.
+
+## Project
+
+Immich Album Jobs: a companion app for Immich v3 that runs rerunnable batch jobs and syncs matching assets into Immich albums. First job: screenshot detector.
+
+- Design: `docs/design/immich-album-jobs-SDD.md`
+- Plan: `docs/design/immich-album-jobs-implementation-plan.md`
+- Immich API findings: `docs/immich-api-notes.md` (read before touching the Immich client; it overrides the SDD where they differ, e.g. cursor pagination)
+
+## Implementation plan tracking (important)
+
+While implementing, **keep the implementation plan up to date**:
+
+- Check off each task in `docs/design/immich-album-jobs-implementation-plan.md` (`- [ ]` → `- [x]`) as soon as it is done, in the same commit as the work.
+- Check off the phase's deliverables / "Done when" items once verified.
+- If a task is done differently than planned, or deferred, add a short indented note under it (e.g. `  - Note: …`) instead of silently changing the task.
+- Update the phase status line (`**Status:**`) when a phase starts or finishes.
+- Work phases in order; don't start a phase before its dependencies are checked off.
+
+## Layout
+
+| Path | What |
+| --- | --- |
+| `backend/` | NestJS 12, ESM (`.js` suffix in relative imports), Vitest, oxlint, Prettier |
+| `frontend/` | Angular 22 standalone + signals, Angular Material, Vitest (`ng test`), angular-eslint |
+| `tools/immich-spike/` | API spike script (`@immich/sdk`), run against a real Immich |
+| `worker-py/` | Placeholder (phase 9) |
+
+`backend` and `frontend` are independent npm packages with their own lockfiles (no workspaces). Node 22 (`.nvmrc`).
+
+## Commands
+
+Run in the package directory:
+
+| | backend | frontend |
+| --- | --- | --- |
+| install | `npm ci` | `npm ci` |
+| lint | `npm run lint` | `npm run lint` |
+| format | `npm run format` / `format:check` | `npm run format` / `format:check` |
+| test | `npm test`, `npm run test:e2e` | `npm test` |
+| build | `npm run build` | `npm run build` |
+
+Before committing, run lint, format check, tests and build for every package you touched. CI (`.github/workflows/ci.yml`) runs the same plus a Docker build and `/api/health` smoke test.
+
+## Conventions
+
+- Talk to Immich only through the `ImmichClient` adapter (phase 1+), never raw `fetch` in job code.
+- Immich v3.x only; `@immich/sdk` pinned to the server's version.
+- All HTTP routes under `/api`.
+- No secrets in the repo, DB or browser; secrets come from `*_FILE` env vars / Docker secrets.
+- New config → `.env.example` and README.

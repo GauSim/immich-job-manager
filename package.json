@@ -1,0 +1,15 @@
+{
+  "name": "immich-album-jobs",
+  "private": true,
+  "description": "Companion app for Immich: rerunnable batch jobs that sync assets into albums",
+  "engines": {
+    "node": ">=22.22.3"
+  },
+  "scripts": {
+    "install:all": "npm ci --prefix backend && npm ci --prefix frontend",
+    "lint": "npm run lint --prefix backend && npm run lint --prefix frontend",
+    "format:check": "npm run format:check --prefix backend && npm run format:check --prefix frontend",
+    "test": "npm test --prefix backend && npm run test:e2e --prefix backend && npm test --prefix frontend",
+    "build": "npm run build --prefix backend && npm run build --prefix frontend"
+  }
+}

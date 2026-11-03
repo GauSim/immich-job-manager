@@ -1,0 +1,22 @@
+{
+  "name": "immich-api-spike",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Phase 0 API spike: verifies Immich v3 API shapes used by Immich Album Jobs",
+  "type": "module",
+  "scripts": {
+    "fixtures": "python3 make-fixtures.py fixtures",
+    "seed": "tsx src/seed.ts",
+    "spike": "tsx src/spike.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@immich/sdk": "3.3.5",
+    "exifr": "7.1.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.2"
+  }
+}
