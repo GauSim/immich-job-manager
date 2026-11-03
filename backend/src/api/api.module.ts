@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { AssetIndexModule } from '../asset-index/asset-index.service.js';
+import { GroupsModule } from '../groups/group-store.js';
 import { RunnerModule } from '../runner/runner.module.js';
 import { SchedulerModule } from '../scheduler/scheduler.module.js';
 import { ApplyService } from '../sync/apply.service.js';
+import { GroupApplyService } from '../sync/group-apply.service.js';
 import { AssetsController } from './assets.controller.js';
 import { CandidatesService } from './candidates.service.js';
 import { GroupsService } from './groups.service.js';
@@ -13,7 +15,7 @@ import { RunsService } from './runs.service.js';
 import { SettingsController } from './settings.controller.js';
 
 @Module({
-  imports: [RunnerModule, SchedulerModule, AssetIndexModule],
+  imports: [RunnerModule, SchedulerModule, AssetIndexModule, GroupsModule],
   controllers: [
     JobTypesController,
     JobsController,
@@ -27,6 +29,7 @@ import { SettingsController } from './settings.controller.js';
     CandidatesService,
     GroupsService,
     ApplyService,
+    GroupApplyService,
   ],
 })
 export class ApiModule {}

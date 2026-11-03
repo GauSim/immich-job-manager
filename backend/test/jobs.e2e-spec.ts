@@ -96,6 +96,24 @@ describe('Jobs & runs API (e2e)', () => {
   });
 
   describe('jobs CRUD', () => {
+    it('keeps fields a PATCH does not send (no defaults on update)', async () => {
+      const job = await createNoopJob({
+        syncMode: 'mirror',
+        schedule: '0 3 * * *',
+        enabled: true,
+      });
+      const res = await http
+        .patch(`/api/jobs/${job.id}`)
+        .send({ name: 'Renamed' })
+        .expect(200);
+      expect(res.body).toMatchObject({
+        name: 'Renamed',
+        syncMode: 'mirror',
+        enabled: true,
+        schedule: '0 3 * * *',
+      });
+    });
+
     it('creates a job with defaults and lists it', async () => {
       const job = await createNoopJob({ params: { pageSize: 50 } });
       expect(job).toMatchObject({

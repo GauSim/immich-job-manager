@@ -236,7 +236,7 @@ export class FakeImmichLibrary {
   assets: FakeAsset[];
   readonly albums = new Map<
     string,
-    { albumName: string; members: Set<string> }
+    { albumName: string; members: Set<string>; description?: string }
   >();
   private albumSeq = 0;
   /** `updatedAt` of assets that don't set one (before any test run). */
@@ -259,19 +259,42 @@ export class FakeImmichLibrary {
       return {
         json: [...this.albums.entries()]
           .filter(([, a]) => !name || a.albumName.includes(name))
-          .map(([id, a]) => ({
-            id,
-            albumName: a.albumName,
-            assetCount: a.members.size,
-          })),
+          .map(([id, a]) => {
+            // Like Immich: local dates of the earliest / latest member, for non-empty albums.
+            const dates = this.assets
+              .filter((x) => a.members.has(x.id))
+              .map((x) => x.localDateTime as string | undefined)
+              .filter((d): d is string => !!d)
+              .sort();
+            return {
+              id,
+              albumName: a.albumName,
+              description: a.description ?? '',
+              assetCount: a.members.size,
+              ...(dates.length
+                ? { startDate: dates[0], endDate: dates[dates.length - 1] }
+                : {}),
+            };
+          }),
       };
     });
     server.on('POST /albums', (req) => {
-      const { albumName } = req.body as { albumName: string };
+      const { albumName, description } = req.body as {
+        albumName: string;
+        description?: string;
+      };
+      const id = this.addAlbum(albumName, [], description);
       return {
         status: 201,
-        json: { id: this.addAlbum(albumName), albumName, assetCount: 0 },
+        json: { id, albumName, description: description ?? '', assetCount: 0 },
       };
+    });
+    server.onMatch('PATCH', /^\/albums\/([^/]+)$/, (req) => {
+      const album = this.albums.get(req.params![0]);
+      if (!album) return { status: 400, json: { message: 'Not found' } };
+      const { albumName } = req.body as { albumName?: string };
+      if (albumName) album.albumName = albumName;
+      return { json: { id: req.params![0], albumName: album.albumName } };
     });
     server.onMatch('GET', /^\/assets\/([^/]+)\/original$/, (req, res) => {
       const id = req.params![0];
@@ -298,9 +321,13 @@ export class FakeImmichLibrary {
     );
   }
 
-  addAlbum(name: string, members: string[] = []): string {
+  addAlbum(name: string, members: string[] = [], description?: string): string {
     const id = `00000000-0000-4000-8000-${String(++this.albumSeq).padStart(12, '0')}`;
-    this.albums.set(id, { albumName: name, members: new Set(members) });
+    this.albums.set(id, {
+      albumName: name,
+      members: new Set(members),
+      description,
+    });
     return id;
   }
 
@@ -317,6 +344,15 @@ export class FakeImmichLibrary {
     return (
       this.server.requestsMatching('PUT', /^\/albums\/[^/]+\/assets$/).length +
       this.server.requestsMatching('DELETE', /^\/albums\/[^/]+\/assets$/).length
+    );
+  }
+
+  /** Every write to Immich albums: create, rename, add, remove. */
+  allAlbumWrites(): number {
+    return (
+      this.writeCalls() +
+      this.server.requestsMatching('POST', /^\/albums$/).length +
+      this.server.requestsMatching('PATCH', /^\/albums\/[^/]+$/).length
     );
   }
 

@@ -99,7 +99,11 @@ export class RunExecutor {
           signal,
         });
         log.info(
-          `Finished: ${totals.scanned} indexed, ${totals.matched} assets in groups in ${seconds(startedAt)} s`,
+          `Finished: ${totals.scanned} indexed, ${totals.matched} assets in groups` +
+            (run.dryRun
+              ? ''
+              : `, ${totals.added} added, ${totals.removed} removed`) +
+            ` in ${seconds(startedAt)} s`,
         );
       } else {
         // Albums: dry runs only read (exclusions), real runs find or create them.

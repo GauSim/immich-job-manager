@@ -111,11 +111,6 @@ export class RunLauncher {
         'The job is in dry-run mode; change its sync mode to run it for real',
       );
     }
-    if (!plan.dryRun && this.isGroupJob(job)) {
-      throw new BadRequestException(
-        'Real runs of group jobs (e.g. trip albums) are not available yet; start a dry run',
-      );
-    }
     if (this.locks.isLocked(job.id)) {
       throw new ConflictException(
         'A dry run of this job is being applied; try again in a moment',

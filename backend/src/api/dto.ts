@@ -11,24 +11,38 @@ const cron = z
     error: 'must be a valid cron expression, e.g. "0 3 * * *"',
   });
 
-export const CreateJobDto = z.strictObject({
+/** Job fields without defaults (shared by create and update). */
+const jobFields = {
   name,
   typeId: z.string().min(1, 'is required'),
   /** Required for asset jobs; group jobs (e.g. trip albums) create one album per group. */
   targetAlbumName: name.optional(),
-  /** null/omitted → `<target> – excluded` */
+  /** null/omitted → `<target> – excluded` (group jobs: `<job name> – excluded`) */
   exclusionAlbumName: name.nullish(),
-  params: z.record(z.string(), z.unknown()).default({}),
-  syncMode: z.enum(SYNC_MODES).default('dry-run'),
+  params: z.record(z.string(), z.unknown()),
+  syncMode: z.enum(SYNC_MODES),
   schedule: cron.nullish(),
-  enabled: z.boolean().default(false),
+  enabled: z.boolean(),
+};
+
+export const CreateJobDto = z.strictObject({
+  ...jobFields,
+  params: jobFields.params.default({}),
+  syncMode: jobFields.syncMode.default('dry-run'),
+  enabled: jobFields.enabled.default(false),
 });
 export type CreateJobDto = z.infer<typeof CreateJobDto>;
 
-/** Like create, all optional; the job type cannot change. `params` replaces the stored params. */
-export const UpdateJobDto = CreateJobDto.omit({ typeId: true })
-  .partial()
-  .strict();
+/**
+ * Like create, all optional; the job type cannot change. `params` replaces the
+ * stored params. Built without defaults: with Zod 4, defaults inside
+ * `.partial()` still apply, so a PATCH of one field reset `syncMode` and
+ * `enabled`.
+ */
+export const UpdateJobDto = z
+  .strictObject(jobFields)
+  .omit({ typeId: true })
+  .partial();
 export type UpdateJobDto = z.infer<typeof UpdateJobDto>;
 
 export const StartRunDto = z.strictObject({
@@ -104,10 +118,20 @@ export const UpdateSettingsDto = z.strictObject({
 export type UpdateSettingsDto = z.infer<typeof UpdateSettingsDto>;
 
 /** `PATCH /runs/:id/groups` — tick or untick proposed groups (all when `keys` is omitted). */
-export const UpdateRunGroupsDto = z.strictObject({
-  selected: z.boolean(),
-  keys: z.array(z.string().min(1)).min(1).max(10_000).optional(),
-});
+export const UpdateRunGroupsDto = z
+  .strictObject({
+    selected: z.boolean().optional(),
+    /** `create` groups with a proposed existing album: adopt it (true) or create a new album (false). Needs `keys`. */
+    adopt: z.boolean().optional(),
+    keys: z.array(z.string().min(1)).min(1).max(10_000).optional(),
+  })
+  .refine((v) => v.selected !== undefined || v.adopt !== undefined, {
+    error: 'set selected and/or adopt',
+  })
+  .refine((v) => v.adopt === undefined || v.keys, {
+    error: 'adopt needs keys',
+    path: ['keys'],
+  });
 export type UpdateRunGroupsDto = z.infer<typeof UpdateRunGroupsDto>;
 
 /** `PATCH /jobs/:id/groups/:groupId` — user decision on a stored group. */

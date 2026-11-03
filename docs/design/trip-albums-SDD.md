@@ -395,6 +395,12 @@ Idempotent: a rerun without library changes makes zero write calls. Sync modes k
 
 Runs: the default schedule is nightly. Every run refreshes the whole index (T1: ~8 s for 32k assets), re-groups the whole index and syncs only the trips that changed, so it sees splits and merges too.
 
+T4 implementation notes:
+
+- All active trips are read back on every real run; this is still zero writes without changes.
+- An album deleted in Immich makes its trip `ignored` (never recreated automatically).
+- Apply is once per dry run, and refused if a later sync changed the job's trips.
+
 ### 7.4 Adopting existing albums
 
 When a **new** trip is found, the user's own albums that are not managed by any job are checked:
@@ -408,7 +414,7 @@ The best match is adopted: `adopted = true`, `name_locked = true`, existing memb
 ### 7.5 Guardrails
 
 - Dry runs never change Immich (same rule as today).
-- First real run with more than `maxNewAlbumsWithoutReview` (default 30) new trips stops before writing and asks for a dry run and apply. This avoids 200 surprise albums from a mis-tuned config.
+- First real run with more than 30 new trips (`MAX_NEW_GROUPS_WITHOUT_REVIEW`) stops before writing anything, incl. the exclusion album, and asks for a dry run and apply. This avoids 200 surprise albums from a mis-tuned config.
 - Albums are never deleted. Assets are only removed from albums when `owned` and in mirror mode.
 
 ---

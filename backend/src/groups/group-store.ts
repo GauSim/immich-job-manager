@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { Global, Injectable, Module, NotFoundException } from '@nestjs/common';
 import type {
   GroupAction,
+  GroupAssetState,
   GroupStatus,
 } from '../persistence/entities/index.js';
 import { SqliteService, sqliteNow } from '../persistence/sqlite.service.js';
@@ -48,6 +50,26 @@ export interface JobGroupView {
   /** Assets in the album as the job knows them (owned + present). */
   assetCount: number;
   excludedCount: number;
+}
+
+export interface NewGroup {
+  jobId: string;
+  key: string;
+  status: GroupStatus;
+  start: Date;
+  end: Date;
+  coreStart: Date;
+  coreEnd: Date;
+  summary: Record<string, unknown>;
+  albumId: string | null;
+  generatedName: string;
+  nameLocked: boolean;
+  adopted: boolean;
+  runId: string | null;
+}
+
+export interface StoredProposal extends RunGroupView {
+  assetIds: string[];
 }
 
 /** Actions whose assets go into an album on apply (and can be ticked). */
@@ -122,6 +144,10 @@ export class GroupStore {
     runId: string,
     items: readonly ReconcileItem[],
     fileNames: ReadonlyMap<string, string>,
+    adoptions: ReadonlyMap<
+      string,
+      { albumId: string; albumName: string }
+    > = new Map(),
   ): number {
     return this.sqlite.transaction((db) => {
       db.prepare('DELETE FROM run_candidate WHERE run_id = ?').run(runId);
@@ -147,12 +173,14 @@ export class GroupStore {
           coreStart: e!.coreStart,
           coreEnd: e!.coreEnd,
         };
+        const adoption =
+          item.action === 'create' && p ? adoptions.get(p.key) : undefined;
         group.run(
           runId,
           key,
           item.action,
           e?.id ?? null,
-          e?.albumId ?? null,
+          adoption?.albumId ?? e?.albumId ?? null,
           p?.name ?? e!.name,
           sqliteNow(range.start),
           sqliteNow(range.end),
@@ -161,6 +189,12 @@ export class GroupStore {
           p?.ongoing ? 1 : 0,
           JSON.stringify({
             ...(p?.summary ?? e?.summary),
+            ...(adoption
+              ? {
+                  adoptAlbumId: adoption.albumId,
+                  adoptAlbumName: adoption.albumName,
+                }
+              : {}),
             ...(item.mergedInto
               ? {
                   mergedInto: item.mergedInto.id,
@@ -287,6 +321,154 @@ export class GroupStore {
       assetCount: r.asset_count,
       excludedCount: r.excluded_count,
     }));
+  }
+
+  /** True once the job has stored any group (first-run guardrail, SDD §7.5). */
+  hasGroups(jobId: string): boolean {
+    return !!this.sqlite.db
+      .prepare('SELECT 1 FROM job_group WHERE job_id = ? LIMIT 1')
+      .get(jobId);
+  }
+
+  /** Albums any job manages (group albums, target and exclusion albums): never adopted. */
+  managedAlbumIds(): Set<string> {
+    const rows = this.sqlite.db
+      .prepare(
+        `SELECT album_id AS id FROM job_group WHERE album_id IS NOT NULL
+         UNION SELECT target_album_id FROM job WHERE target_album_id IS NOT NULL
+         UNION SELECT exclusion_album_id FROM job WHERE exclusion_album_id IS NOT NULL`,
+      )
+      .all() as { id: string }[];
+    return new Set(rows.map((r) => r.id));
+  }
+
+  /** Membership states of a stored group. */
+  groupAssets(groupId: string): Map<string, GroupAssetState> {
+    const rows = this.sqlite.db
+      .prepare('SELECT asset_id, state FROM job_group_asset WHERE group_id = ?')
+      .all(groupId) as { asset_id: string; state: GroupAssetState }[];
+    return new Map(rows.map((r) => [r.asset_id, r.state]));
+  }
+
+  /** Inserts a stored group; returns its id. */
+  insertGroup(g: NewGroup): string {
+    const id = randomUUID();
+    const now = sqliteNow();
+    this.sqlite.db
+      .prepare(
+        `INSERT INTO job_group (id, job_id, key, status, start_at, end_at, core_start_at, core_end_at, summary,
+           album_id, generated_name, name_locked, adopted, created_by_run_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        id,
+        g.jobId,
+        g.key,
+        g.status,
+        sqliteNow(g.start),
+        sqliteNow(g.end),
+        sqliteNow(g.coreStart),
+        sqliteNow(g.coreEnd),
+        JSON.stringify(g.summary),
+        g.albumId,
+        g.generatedName,
+        g.nameLocked ? 1 : 0,
+        g.adopted ? 1 : 0,
+        g.runId,
+        now,
+        now,
+      );
+    return id;
+  }
+
+  /** Updates a stored group after a sync. */
+  updateGroup(id: string, g: Omit<NewGroup, 'jobId' | 'runId'>): void {
+    this.sqlite.db
+      .prepare(
+        `UPDATE job_group SET key = ?, status = ?, start_at = ?, end_at = ?, core_start_at = ?, core_end_at = ?,
+           summary = ?, album_id = ?, generated_name = ?, name_locked = ?, adopted = ?, updated_at = ?
+         WHERE id = ?`,
+      )
+      .run(
+        g.key,
+        g.status,
+        sqliteNow(g.start),
+        sqliteNow(g.end),
+        sqliteNow(g.coreStart),
+        sqliteNow(g.coreEnd),
+        JSON.stringify(g.summary),
+        g.albumId,
+        g.generatedName,
+        g.nameLocked ? 1 : 0,
+        g.adopted ? 1 : 0,
+        sqliteNow(),
+        id,
+      );
+  }
+
+  /** Sets a group's status (sync decisions: orphaned, merged, ignored). */
+  setStatus(id: string, status: GroupStatus): void {
+    this.sqlite.db
+      .prepare('UPDATE job_group SET status = ?, updated_at = ? WHERE id = ?')
+      .run(status, sqliteNow(), id);
+  }
+
+  /** Applies membership changes in one transaction; `null` deletes the row. */
+  setGroupAssets(
+    groupId: string,
+    changes: ReadonlyMap<string, GroupAssetState | null>,
+    runId: string | null,
+  ): void {
+    if (changes.size === 0) return;
+    const now = sqliteNow();
+    this.sqlite.transaction((db) => {
+      const upsert = db.prepare(
+        `INSERT INTO job_group_asset (group_id, asset_id, state, run_id, changed_at) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (group_id, asset_id) DO UPDATE SET state = excluded.state, run_id = excluded.run_id,
+           changed_at = excluded.changed_at`,
+      );
+      const del = db.prepare(
+        'DELETE FROM job_group_asset WHERE group_id = ? AND asset_id = ?',
+      );
+      for (const [assetId, state] of changes) {
+        if (state === null) del.run(groupId, assetId);
+        else upsert.run(groupId, assetId, state, runId, now);
+      }
+    });
+  }
+
+  /** A dry run's proposals as stored for review, with their assets (apply). */
+  runProposals(runId: string): StoredProposal[] {
+    const groups = this.listRunGroups(runId);
+    const assets = this.sqlite.db.prepare(
+      'SELECT asset_id FROM run_candidate WHERE run_id = ? AND group_key = ?',
+    );
+    return groups.map((g) => ({
+      ...g,
+      assetIds: (assets.all(runId, g.key) as { asset_id: string }[]).map(
+        (r) => r.asset_id,
+      ),
+    }));
+  }
+
+  /** Review: use the proposed existing album (`adopt`) or create a new one for a `create` group. */
+  setAdoption(runId: string, key: string, adopt: boolean): boolean {
+    const row = this.sqlite.db
+      .prepare(
+        `SELECT summary FROM run_group WHERE run_id = ? AND group_key = ? AND action = 'create'`,
+      )
+      .get(runId, key) as { summary: string } | undefined;
+    if (!row) return false;
+    const candidate = (JSON.parse(row.summary) as { adoptAlbumId?: string })
+      .adoptAlbumId;
+    if (adopt && !candidate) return false;
+    return (
+      this.sqlite.db
+        .prepare(
+          'UPDATE run_group SET album_id = ? WHERE run_id = ? AND group_key = ?',
+        )
+        .run(adopt ? candidate : null, runId, key).changes > 0
+    );
   }
 
   /** User decision on a stored group: `ignored`, `locked`, or back to `active`. */

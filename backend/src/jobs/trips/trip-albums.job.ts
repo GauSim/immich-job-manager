@@ -34,6 +34,14 @@ export class TripAlbumsJob implements GroupJobType<TripParams> {
     };
   }
 
+  adoption(
+    params: TripParams,
+  ): { minShare: number; minCoverage: number } | null {
+    return params.adoptExisting === 'auto'
+      ? { minShare: params.advanced.adoptMinShare, minCoverage: 0.3 }
+      : null;
+  }
+
   group(ctx: GroupContext<TripParams>): ProposedGroup[] {
     const { trips, dropped } = detectTrips({
       assets: ctx.index.all(),

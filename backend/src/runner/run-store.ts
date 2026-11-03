@@ -135,6 +135,16 @@ export class RunStore {
     return toTotals(row, runId);
   }
 
+  /** Group runs / group apply: assets added and removed by the album sync. */
+  addSyncTotals(runId: string, added: number, removed: number): RunTotals {
+    const row = this.sqlite.db
+      .prepare(
+        `UPDATE job_run SET added = added + ?, removed = removed + ? WHERE id = ? ${RETURNING_TOTALS}`,
+      )
+      .get(added, removed, runId) as Record<string, number> | undefined;
+    return toTotals(row, runId);
+  }
+
   /** Mirror mode: drops ownership of removed (and vanished) assets; counts `removed`. */
   recordRemovals(
     runId: string,

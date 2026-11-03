@@ -40,6 +40,10 @@ import {
   type ApplyPreview,
   type ApplyResult,
 } from '../sync/apply.service.js';
+import type {
+  GroupApplyPreview,
+  GroupApplyResult,
+} from '../sync/group-apply.service.js';
 import { ZodPipe } from './validation.js';
 
 /** SSE keep-alive comment interval (proxies drop idle connections). */
@@ -57,14 +61,18 @@ export class RunsController {
 
   /** Dry run: counts for the apply confirmation (read-only). */
   @Get(':id/apply-preview')
-  applyPreview(@Param('id', ParseUUIDPipe) id: string): Promise<ApplyPreview> {
+  applyPreview(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<ApplyPreview | GroupApplyPreview> {
     return this.applyService.preview(id);
   }
 
   /** Dry run: adds the selected candidates to the job's album. Never removes. */
   @Post(':id/apply')
   @HttpCode(200)
-  apply(@Param('id', ParseUUIDPipe) id: string): Promise<ApplyResult> {
+  apply(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<ApplyResult | GroupApplyResult> {
     return this.applyService.apply(id);
   }
 
