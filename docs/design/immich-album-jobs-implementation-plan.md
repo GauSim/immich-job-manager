@@ -408,6 +408,6 @@ Tasks:
 | --- | --- | --- |
 | Documents and receipts | CLIP queries, no camera EXIF, OCR text (if exposed by Immich) | No |
 | Messenger images | Filename patterns (e.g. WhatsApp), stripped EXIF | No |
-| Trip albums (one album per trip) | Asset index, GPS + place + time clustering; see `trip-albums-SDD.md` and `trip-albums-implementation-plan.md` | No |
+| Trip albums (one album per trip) – **implemented in v1.1.0** | Asset index, GPS + place + time clustering; see `trip-albums-SDD.md` and `trip-albums-implementation-plan.md` | No |
 | Best of a person per year | Metadata search by person + date, rating | No |
 | Custom classifier | Model-specific | Yes (phase 9) |

@@ -1,10 +1,12 @@
 # Immich Album Jobs
 
-Self-hosted companion app for [Immich](https://immich.app) v3: rerunnable, scheduled batch jobs that find assets and keep them in an Immich album. The first job type puts **all your screenshots** into one album. It talks to Immich only through its REST API, with a scoped API key, and never deletes or changes assets — it only creates albums and adds/removes album membership.
+Self-hosted companion app for [Immich](https://immich.app) v3: rerunnable, scheduled batch jobs that find assets and keep them in Immich albums. Job types: **Screenshots** (all your screenshots in one album) and **Trip albums** (one album per holiday trip). It talks to Immich only through its REST API, with a scoped API key, and never deletes or changes assets — it only creates albums and adds/removes album membership.
 
-> **v1.0.0** – screenshot job, dry-run review in the browser, album sync (additive / mirror / exclusion album), nightly incremental runs, password login. Python ML jobs (phase 9) are not part of 1.0.
+> **v1.1.0** – adds **trip albums**: one album per trip, detected from photo dates and locations, incl. travel days and camera photos without GPS, with a trip review in the browser.
+> **v1.0.0** – screenshot job, dry-run review in the browser, album sync (additive / mirror / exclusion album), nightly incremental runs, password login. Python ML jobs (phase 9) are not part of 1.x.
 
 - Design: [software design document](docs/design/immich-album-jobs-SDD.md) · [implementation plan](docs/design/immich-album-jobs-implementation-plan.md) · [Immich API notes](docs/immich-api-notes.md)
+- Trip albums: [design](docs/design/trip-albums-SDD.md) · [implementation plan](docs/design/trip-albums-implementation-plan.md)
 
 ---
 
@@ -23,6 +25,8 @@ In Immich: **Account settings → API keys → New API key**. Name it e.g. `albu
 | `asset.view` | thumbnails in the review grid |
 | `asset.download` | reading the first 64 KB of borderline originals (iOS screenshot tag) |
 | `album.read`, `album.create` | finding / creating the target and exclusion albums |
+| `album.update` | renaming trip albums when a trip's name changes (trip albums) |
+| `user.read` | your user id, to tell your assets from a partner's (trip albums) |
 | `albumAsset.create` | adding matches to the album |
 | `albumAsset.delete` | removing assets in *mirror* mode (only assets this app added) |
 
@@ -78,6 +82,15 @@ Open `http://<host>:3000`, sign in with the app password, and check the toolbar:
 
 False positive later? Move it to the album **`Screenshots – excluded`** in Immich; it stays out from then on.
 
+### 7. Trip albums (optional)
+
+1. **Jobs → New job**: type *Trip albums*, name e.g. `Trips`. There is no target album: every trip gets its own. Leave **Dry run only** and save.
+2. **Dry run** → review the trips: dates, places, cover photos, and **Show photos** to see each photo and why it is included. Untick trips you don't want; if an existing album of yours already covers a trip, choose whether to use it.
+3. **Apply trips** creates the albums. Unticked trips are remembered and never created later.
+4. Edit the job: sync mode **Additive**, schedule `0 3 * * *`, **Schedule enabled**. New trips get an album automatically; a trip in progress grows every night.
+
+Detection works on your own library's data; to check it on everything first, run the [tuning CLI](backend/README.md#trip-detection-tuning) over an export (nothing is written to Immich).
+
 ---
 
 ## How it works
@@ -107,6 +120,20 @@ The file tag is only read for borderline images (PNG or no camera EXIF, below th
 - **Schedules** (cron, in `TZ`): real runs are **incremental** (assets updated since the last successful run); the first run, a job-type update and **Full rescan** scan everything; dry runs always scan everything. A scheduled run is skipped while the job is still running.
 - **Housekeeping** (nightly): keeps candidates of the last 5 dry runs per job and 30 days of run logs (both adjustable in Settings); vacuums the database monthly.
 - A rerun without library changes makes no write calls to Immich.
+
+### Trip albums
+
+- **Home** is inferred per day from where you took photos on the most *days* (not photos) within ± 60 days, so a holiday never becomes home and a move abroad is followed. The job page shows it per period.
+- **A trip** is time in another country (default; or more than `minDistanceKm` away, or either), at least `minTripDays` calendar days (2 = one night) and `minAwayAssets` photos, at most `maxTripDays`. It ends after `homeStayHours` at home or a `maxGapHours` gap. Several countries in a row are one trip.
+- **Travel days:** a trip starts right after your last photo at home and ends right before the next one, so photos at the airport are included. A flight is recognised by speed (`transitSpeedKmh`); travel days add at most `maxTransitHours` on each side.
+- **Photos without GPS** join a trip by time: camera photos only (default), all, or none. Camera photos without a time zone are matched by their local time.
+- **Album names** come from `nameTemplate` (default `{countries} – {period}`, e.g. *Thailand & Cambodia – Mar 2026*); placeholders: `{countries} {country} {cities} {period} {year} {month} {start} {end} {days}`.
+- **Your edits win:** photos you remove from a trip album stay out; photos you add are kept; a renamed album is never renamed back; a deleted album means the trip is ignored. Albums are never deleted, and *mirror* mode only removes photos the job added (never from an album it adopted).
+- **Existing albums:** an album of yours that already covers a new trip (≥ 80 % of its photos within the trip, ≥ 30 % of the trip's photos) is used instead of creating a duplicate (`adoptExisting`); the job only adds to it.
+- **Partner photos** (shared with *show in timeline*): join your trips (`fill`, default), can start trips (`full`), or `off`. Archived partner photos are never used (Immich doesn't allow adding them).
+- **Exclusion album** (default `<job name> – excluded`): photos in it are never put into any trip album.
+- **Runs** read the whole library every time (~8 s per 30k assets), check every trip album and write only what changed. A first real run that would create more than 30 albums stops and asks for a dry run and apply instead.
+- Per-trip actions on the job page: **Ignore** (never sync again), **Lock** (keep the album as it is), **Activate**.
 
 ---
 
@@ -167,7 +194,7 @@ All settings are environment variables, validated at start; an invalid value sto
 | `PUBLIC_DIR` | `public` | UI build served at `/` |
 | `LOG_LEVEL` | `info` | `fatal` … `trace` |
 | `IMMICH_NETWORK` | `immich_default` | (compose only) Immich's Docker network |
-| `IMMICH_ALBUM_JOBS_VERSION` | `1.0.0` | (compose only) image tag to pull |
+| `IMMICH_ALBUM_JOBS_VERSION` | `1.1.0` | (compose only) image tag to pull |
 | `PY_WORKER_URL` | unset | Python ML worker (phase 9) |
 
 Runtime settings (retention, default threshold) are in **Settings** and stored in the database.
@@ -194,6 +221,10 @@ All under `/api`; every route except `/health` and `/auth/*` needs a session (or
 | GET | `/runs/:id/events` | Server-sent events: `status`, `progress` (≤ 1/s), `log` |
 | GET, PATCH | `/runs/:id/candidates` | Dry run: list (`?sort=&minScore=&maxScore=&selected=`) / tick-untick |
 | GET · POST | `/runs/:id/apply-preview` · `/runs/:id/apply` | Dry run: preview / add the selected candidates to the album |
+| GET, PATCH | `/runs/:id/groups` | Group job dry run (trip albums): proposed trips / tick-untick, `adopt` |
+| GET | `/runs/:id/candidates?group=<key>` | Assets of one proposed trip with reasons |
+| GET | `/jobs/:id/groups` · PATCH `/jobs/:id/groups/:groupId` | Stored trips / `{ status: active \| ignored \| locked }` |
+| GET | `/jobs/:id/insights` | Trip albums: inferred home per period |
 | GET | `/assets/:id/thumbnail` | Thumbnail proxy (only assets seen in a run) |
 | GET, PATCH | `/settings` | Runtime settings and app info |
 

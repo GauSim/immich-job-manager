@@ -7,6 +7,7 @@ import type {
   RunLogger,
 } from '../core/job-type.js';
 import { findAdoptions, type Adoption } from '../groups/adoption.js';
+import { Clock } from '../core/clock.js';
 import { RunEventsService } from '../events/run-events.service.js';
 import {
   reconcileGroups,
@@ -56,6 +57,7 @@ export class GroupRunExecutor {
     private readonly store: RunStore,
     private readonly events: RunEventsService,
     private readonly albums: GroupAlbumSync,
+    private readonly clock: Clock,
   ) {}
 
   async execute(args: GroupRunArgs): Promise<RunTotals> {
@@ -108,7 +110,7 @@ export class GroupRunExecutor {
         params,
         index: reader,
         ownerId,
-        now: new Date(),
+        now: this.clock.now(),
         log,
         signal,
       })
