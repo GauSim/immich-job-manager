@@ -50,7 +50,7 @@ This is the first job that writes to **many albums**, and the first that judges 
 | Existing hand-made albums | Adopted when they overlap a detected trip strongly (only adds, never removes or renames). |
 | Ongoing trip | Album is created once the trip qualifies and grows on every scheduled run. |
 | Review | Dry run shows a **trip list**. Trips can be unticked before apply. |
-| Scope | Assets shared by a partner are included (subject to the T0 API check). Archived assets are off by default. |
+| Scope | Assets shared by a partner are included (T0: possible for the partner's timeline assets). Archived assets are off by default. |
 | Operation | Configured once and scheduled. Runs create and update albums with no interaction. |
 
 ### 1.4 Terms
@@ -83,11 +83,12 @@ All from `POST /search/metadata` with `withExif: true` (API notes §4). No extra
 | `exifInfo.description` | `"Screenshot"` marks iOS screenshots (never filled into trips). |
 | `type`, `visibility`, `ownerId`, `updatedAt` | Videos on/off, archived on/off, partner assets, incremental index refresh. |
 
-Notes and risks (checked in phase T0):
+Notes and risks (answered in phase T0, see `docs/immich-api-notes.md` §10):
 
 - Sorting by `localDateTime` across time zones is wrong. Example: Berlin 15:00 local is 13:00 UTC, and Bangkok 07:00 the next day is 00:00 UTC. Order and gaps always use the instant; only calendar logic uses local time.
-- Cameras without a time zone in EXIF may have a wrong instant (camera clock still on home time). The no-GPS fill therefore matches on the instant **or** the local wall-clock time (§5.5).
-- `POST /search/metadata` may already return partner assets (Immich searches the user's and timeline-shared partners' assets). This affects the screenshot job too and must be checked.
+- Immich takes `timeZone` from EXIF offset tags, else from the GPS position. **When `timeZone` is `null`, `fileCreatedAt` is the wall-clock time read as UTC**, so the instant is wrong by the real offset. This typically affects camera photos without GPS. Such assets are matched by local time only (§5.5).
+- `POST /search/metadata` returns the user's assets **and those of partners who share with "show in timeline"**, including the partners' archived assets. There is no owner filter; `ownerId` on each item tells them apart. Own user id: `GET /users/me` (`user.read`).
+- `country` is set for practically every GPS asset on land (nearest place, else country polygon); `null` with GPS means sea or far off-shore.
 
 ---
 
@@ -268,14 +269,14 @@ Sat 09:30  home (GPS 0.1 km)                    → not in trip  ◄ trip ends b
 An asset without GPS joins a trip when:
 
 - `fillWithoutGps = 'camera'` (default): `has_camera` and not `is_screenshot`; or `'all'`; or `'none'`;
-- and its instant **or** its local wall-clock time falls inside the trip range. The local-time match covers cameras whose clock or time zone is off.
+- and its time falls inside the trip range: the **instant** when `timeZone` is set; the **local wall-clock time** against the trip's local range when `timeZone` is `null` (its instant is not real, API notes §10.3). An asset with a zone whose local time falls inside the range but whose instant does not (camera clock still on home time, but with an offset tag) is also accepted.
 - The asset must not lie in more than one trip. It goes to the trip whose range contains its instant first.
 
 Videos follow the same rules (`includeVideos`). Phone videos usually have GPS.
 
 ### 5.6 Partner assets
 
-Subject to the T0 check (can search return them, and may the API key add them to the user's album). `partnerAssets`:
+T0 (API notes §10.1–10.2): the search already returns assets of partners who share with "show in timeline", and a partner's **timeline** asset can be added to the user's album (an archived one is refused with `no_permission`). Partner assets are therefore indexed only when `visibility = timeline`. To use a partner's assets, the partner share must have "show in timeline" on. `partnerAssets`:
 
 | Value | Meaning |
 | --- | --- |
@@ -283,7 +284,7 @@ Subject to the T0 check (can search return them, and may the API key add them to
 | `full` | Partner assets can also establish trips. |
 | `off` | Ignored. |
 
-If adding partner assets to an album is not allowed, `fill` and `full` are removed from the schema and the job ignores them (decision recorded in the plan).
+With `partnerAssets = off`, partner rows are dropped from the index. Because search mixes them in, the screenshot job needs the same owner check (follow-up from T0).
 
 ### 5.7 Ongoing trips
 
@@ -395,7 +396,7 @@ When a **new** trip is found, the user's own albums that are not managed by any 
 - the album covers ≥ 30 % of the trip's assets, and
 - no other trip claims it.
 
-The best match is adopted: `adopted = true`, `name_locked = true`, existing members become `present`. The job only adds to it, never removes or renames. Album member lists are read only for albums whose `updatedAt` changed since the last check (cached in `job_group`/`setting`), so this stays cheap with hundreds of albums. In the dry-run review each adoption is shown and can be switched to "create new album".
+The best match is adopted: `adopted = true`, `name_locked = true`, existing members become `present`. The job only adds to it, never removes or renames. `GET /albums` already returns each album's `startDate` / `endDate` (local time of the earliest and latest asset). A first filter on those dates needs no extra calls. Member lists are then read only for albums that pass it, cached by `lastModifiedAssetTimestamp`, so this stays cheap with hundreds of albums. In the dry-run review each adoption is shown and can be switched to "create new album".
 
 ### 7.5 Guardrails
 
@@ -479,9 +480,9 @@ Only trips whose proposed asset set or range changed are "touched" and read back
 
 | # | Question | Resolved by |
 | --- | --- | --- |
-| 1 | Does `/search/metadata` return partner assets, and can our key add them to our album? | T0 spike |
-| 2 | Is `fileCreatedAt` a reliable instant for phone and camera photos; how often is `timeZone` missing? | T0 spike |
-| 3 | GPS coverage of the real library per device (phone vs camera vs messenger). This decides how much the fill matters. | T0 spike |
+| 1 | Does `/search/metadata` return partner assets, and can our key add them to our album? | **Answered (T0):** yes, for partners sharing with "show in timeline" (incl. their archived assets); timeline assets can be added, archived ones cannot. API notes §10.1–10.2. Confirm on the real instance with `TRIPS_PARTNER_ADD_TEST=1`. |
+| 2 | Is `fileCreatedAt` a reliable instant for phone and camera photos; how often is `timeZone` missing? | **Answered (T0) in principle:** reliable when `timeZone` is set (EXIF offset or GPS); wall clock read as UTC when it is `null` (API notes §10.3). Share of `null` per device class: pending the real `npm run trips`. |
+| 3 | GPS coverage of the real library per device (phone vs camera vs messenger). This decides how much the fill matters. | Pending: `npm run trips` on the real instance (API notes §10.6). |
 | 4 | Is the ~1 km home cell stable enough, or are several home cells needed (work, parents)? | T2 tuning on real data |
 | 5 | Should `adoptExisting` also look at shared albums (owned by others)? Default: no. | Review |
-| 6 | Should the screenshot job exclude partner assets explicitly, if question 1 shows they are returned today? | T0 spike → issue for the screenshot job |
+| 6 | Should the screenshot job exclude partner assets explicitly? | **Answered (T0):** yes. It currently adds partner screenshots when a partner shares with "show in timeline". Follow-up for the screenshot job. |

@@ -2,8 +2,8 @@
 #
 # 1. Copy spike.env.example to spike.env and fill in IMMICH_URL / IMMICH_API_KEY.
 # 2. Copy this folder to the NAS and create a Docker Compose project from it.
-# 3. Start it; it installs dependencies, runs `npm run spike` and exits.
-#    Output is in the container log, the report in out/spike-report.json.
+# 3. Start it; it installs dependencies, runs `npm run $SPIKE_SCRIPT` (default: spike) and exits.
+#    Output is in the container log, reports in out/ (spike-report.json or trips-stats.json).
 services:
   spike:
     image: node:22-alpine
@@ -14,7 +14,8 @@ services:
     # lets IMMICH_URL=http://host.docker.internal:2283/api reach Immich on the NAS itself
     extra_hosts:
       - host.docker.internal:host-gateway
-    command: sh -c "npm ci --no-audit --no-fund && npm run spike"
+    # $$ defers expansion to the container shell, which sees SPIKE_SCRIPT from spike.env
+    command: sh -c "npm ci --no-audit --no-fund && npm run $${SPIKE_SCRIPT:-spike}"
     restart: "no"
     # Alternative: join Immich's Docker network and use IMMICH_URL=http://immich_server:2283/api
     # (no published port needed). Uncomment both blocks and set the network name from the

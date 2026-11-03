@@ -27,6 +27,25 @@ Side effects: creates the album `immich-album-jobs-spike` (if missing), adds up 
 
 The container installs dependencies, runs the spike and exits (`restart: "no"`). Read the result in the container log; the report is written to `out/spike-report.json` in the folder. Start the project again to rerun.
 
+## Trip albums check (phase T0)
+
+`npm run trips` checks what the trip albums job needs (`docs/design/trip-albums-SDD.md`). It is read-only unless `TRIPS_PARTNER_ADD_TEST=1` is set. It walks the whole library once: images and videos, timeline and archive, with EXIF.
+
+Add `user.read` and `partner.read` to the key, or set `TRIPS_OWNER_ID=<your user id>` instead of `user.read`.
+
+```bash
+IMMICH_URL=http://<host>:2283/api IMMICH_API_KEY=<key> npm run trips
+```
+
+With Docker Compose, set `SPIKE_SCRIPT=trips` in `spike.env`.
+
+| Output | Content | Commit? |
+| --- | --- | --- |
+| `out/trips-stats.json` | Anonymised counts only: GPS, place and time-zone coverage per owner / type / device class; days with and without GPS; country distribution without names; partner assets in search results; album date fields. | Yes, copy to `docs/spike-out/` |
+| `out/trips-index.json` | Raw per-asset index (times, GPS, places, file names) for the T2 tuning CLI. | **Never.** It is your travel history. `out/` is git-ignored. |
+
+`TRIPS_PARTNER_ADD_TEST=1` adds one timeline and one archived partner asset to the spike album and removes them again, recording the per-id `success` / `error`.
+
 ## Throwaway local instance (optional)
 
 Only for a fresh, disposable Immich (it signs up an admin and uploads test files):
