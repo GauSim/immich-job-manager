@@ -284,7 +284,7 @@ T0 (API notes §10.1–10.2): the search already returns assets of partners who 
 | `full` | Partner assets can also establish trips. |
 | `off` | Ignored. |
 
-With `partnerAssets = off`, partner rows are dropped from the index. Because search mixes them in, the screenshot job needs the same owner check (follow-up from T0).
+With `partnerAssets = off`, partner rows are dropped from the index.
 
 ### 5.7 Ongoing trips
 
@@ -485,4 +485,4 @@ Only trips whose proposed asset set or range changed are "touched" and read back
 | 3 | GPS coverage of the real library per device (phone vs camera vs messenger). This decides how much the fill matters. | Pending: `npm run trips` on the real instance (API notes §10.6). |
 | 4 | Is the ~1 km home cell stable enough, or are several home cells needed (work, parents)? | T2 tuning on real data |
 | 5 | Should `adoptExisting` also look at shared albums (owned by others)? Default: no. | Review |
-| 6 | Should the screenshot job exclude partner assets explicitly? | **Answered (T0):** yes. It currently adds partner screenshots when a partner shares with "show in timeline". Follow-up for the screenshot job. |
+| 6 | Should the screenshot job exclude partner assets explicitly? | **Answered (T0):** it currently adds partner screenshots when a partner shares with "show in timeline". Accepted for now (2026-11-03); no change to the screenshot job. |

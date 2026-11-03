@@ -58,8 +58,8 @@ Tasks:
     - Note: yes for non-empty albums, plus `lastModifiedAssetTimestamp` (API notes §10.5). SDD §7.4 updated. Renaming needs `album.update`.
 - [ ] Export an **anonymised stats report** over the real library (committed) and a **raw index export** (local only, gitignored): GPS share per device class (phone / camera / no camera / screenshot), `country` coverage when GPS is set, `timeZone` coverage.
   - Note: the tool is done (`out/trips-stats.json` and `out/trips-index.json`, format version 1 for the T2 CLI). Pending: run on the NAS and copy the stats to `docs/spike-out/trips-stats.json`.
-- [ ] If partner assets are returned today, open a follow-up for the screenshot job (SDD open question 6).
-  - Note: confirmed from source: `metadataSource` adds partner screenshots when a partner shares with "show in timeline". The follow-up issue is not opened yet.
+- [x] If partner assets are returned today, open a follow-up for the screenshot job (SDD open question 6).
+  - Note: confirmed from source: `metadataSource` adds partner screenshots when a partner shares with "show in timeline". Decided (2026-11-03) to accept this for now; no follow-up issue.
 - [x] Record findings in `docs/immich-api-notes.md` (new section "Trips") and update the SDD where they differ.
   - Note: API notes §10. SDD §1.3, §2, §5.5, §5.6, §7.4 and §12 updated. New key permissions for the job: `user.read`, `album.update` (API notes §10.7).
 
