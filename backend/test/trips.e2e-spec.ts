@@ -82,6 +82,7 @@ describe('Trip albums dry run & review (e2e)', () => {
         .expect(201)
     ).body as {
       id: string;
+      typeKind: string;
       targetAlbumName: string;
       effectiveExclusionAlbumName: string;
     };
@@ -127,6 +128,7 @@ describe('Trip albums dry run & review (e2e)', () => {
   it('creates group jobs without a target album (asset jobs still need one)', async () => {
     const job = await createJob();
     expect(job.targetAlbumName).toBe('');
+    expect(job.typeKind).toBe('groups');
     expect(job.effectiveExclusionAlbumName).toBe('Trips – excluded');
     await http
       .post('/api/jobs')

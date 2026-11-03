@@ -10,6 +10,8 @@ async function signIn(page: Page, path = '/') {
 
 /** 30 copies of the anonymised real-library sample: 29,970 assets → 2,910 candidates. */
 const EXPECTED_CANDIDATES = 2910;
+/** Phone photos of the trip library (e2e/stack.mjs); scanned by the screenshot job, never matched. */
+const TRIP_PHOTOS = 302;
 
 test('create a screenshot job, dry-run it and review thousands of candidates', async ({ page }) => {
   const errors: string[] = [];
@@ -34,7 +36,7 @@ test('create a screenshot job, dry-run it and review thousands of candidates', a
   await page.getByRole('button', { name: 'Dry run' }).click();
   await expect(page).toHaveURL(/\/runs\/[0-9a-f-]{36}$/);
   await expect(page.getByTestId('run-status')).toContainText('Succeeded', { timeout: 30_000 });
-  await expect(page.getByTestId('scanned')).toHaveText('29970');
+  await expect(page.getByTestId('scanned')).toHaveText(String(29970 + TRIP_PHOTOS));
   await expect(page.getByTestId('matched')).toHaveText(String(EXPECTED_CANDIDATES));
   await expect(page.getByTestId('chip-all')).toContainText(`All (${EXPECTED_CANDIDATES})`);
   await expect(page.getByTestId('candidate').first()).toBeVisible();

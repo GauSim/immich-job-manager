@@ -17,8 +17,13 @@ import type {
   Job,
   JobInput,
   JobType,
+  GroupApplyPreview,
+  GroupApplyResult,
+  JobGroup,
   Run,
+  RunGroupsResponse,
   RunLog,
+  TripInsights,
 } from './models';
 
 export interface CandidatePage {
@@ -155,6 +160,47 @@ export class Api {
 
   apply(runId: string): Observable<ApplyResult> {
     return this.http.post<ApplyResult>(`/api/runs/${runId}/apply`, {});
+  }
+
+  // ---------------------------------------------------------------- group jobs
+
+  runGroups(runId: string): Observable<RunGroupsResponse> {
+    return this.http.get<RunGroupsResponse>(`/api/runs/${runId}/groups`);
+  }
+
+  /** Tick/untick groups (all when `keys` is omitted), or switch adopt ↔ new album. */
+  updateRunGroups(
+    runId: string,
+    body: { selected?: boolean; adopt?: boolean; keys?: string[] },
+  ): Observable<RunGroupsResponse & { updated: number }> {
+    return this.http.patch<RunGroupsResponse & { updated: number }>(
+      `/api/runs/${runId}/groups`,
+      body,
+    );
+  }
+
+  groupApplyPreview(runId: string): Observable<GroupApplyPreview> {
+    return this.http.get<GroupApplyPreview>(`/api/runs/${runId}/apply-preview`);
+  }
+
+  groupApply(runId: string): Observable<GroupApplyResult> {
+    return this.http.post<GroupApplyResult>(`/api/runs/${runId}/apply`, {});
+  }
+
+  jobGroups(jobId: string): Observable<JobGroup[]> {
+    return this.http.get<JobGroup[]>(`/api/jobs/${jobId}/groups`);
+  }
+
+  updateJobGroup(
+    jobId: string,
+    groupId: string,
+    status: 'active' | 'ignored' | 'locked',
+  ): Observable<JobGroup> {
+    return this.http.patch<JobGroup>(`/api/jobs/${jobId}/groups/${groupId}`, { status });
+  }
+
+  tripInsights(jobId: string): Observable<TripInsights> {
+    return this.http.get<TripInsights>(`/api/jobs/${jobId}/insights`);
   }
 
   thumbnailUrl(assetId: string): string {

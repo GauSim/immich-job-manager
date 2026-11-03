@@ -100,16 +100,21 @@
     </div>
   </details>
 
-  @if (r.dryRun) {
-    <h2 class="section">Review candidates</h2>
-    @if (active()) {
-      <p class="muted">Candidates can be reviewed when the run has finished.</p>
+  @if (r.dryRun && job(); as j) {
+    @if (groupJob()) {
+      <h2 class="section">Review trips</h2>
+      @if (active()) {
+        <p class="muted">Trips can be reviewed when the run has finished.</p>
+      } @else if (r.status === 'succeeded') {
+        <app-trip-review [runId]="r.id" [appliedAt]="r.appliedAt" (applied)="onApplied()" />
+      }
     } @else {
-      <app-review-grid
-        [runId]="r.id"
-        [albumName]="job()?.targetAlbumName ?? ''"
-        (applied)="onApplied()"
-      />
+      <h2 class="section">Review candidates</h2>
+      @if (active()) {
+        <p class="muted">Candidates can be reviewed when the run has finished.</p>
+      } @else {
+        <app-review-grid [runId]="r.id" [albumName]="j.targetAlbumName" (applied)="onApplied()" />
+      }
     }
   }
 } @else {

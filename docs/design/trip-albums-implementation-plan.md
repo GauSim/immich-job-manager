@@ -228,19 +228,28 @@ Tasks:
 
 **Goal:** review and manage trips in the UI (SDD §9).
 
-**Status:** not started
+**Status:** done (2026-11-03) – verified in Playwright against the real backend and a fake Immich with a synthetic trip library
+
+- Note: started while the T4 PR was in review (the user asked to continue).
 
 Tasks:
 
-- [ ] Run detail for group jobs: trip review list (cards with dates, countries, counts per reason, 4 cover thumbnails, action badge NEW / UPDATE / ADOPT / ORPHANED / MERGED), tick/untick, adopt ↔ new switch, apply.
-- [ ] Trip detail: existing candidate grid filtered by `group`, reason chips.
-- [ ] Job page: Trips tab (status, range, Immich album link, ignore / lock / unlock) and Home panel.
-- [ ] Job editor: hide target album for `kind: 'groups'`; params form generated as usual (advanced group collapsed).
-- [ ] `data-testid`s; lazy routes; keep Formly on editor routes only.
+- [x] Run detail for group jobs: trip review list (cards with dates, countries, counts per reason, 4 cover thumbnails, action badge NEW / UPDATE / ADOPT / ORPHANED / MERGED), tick/untick, adopt ↔ new switch, apply.
+  - Note: `pages/trip-review/`. Cards show the name, the local date range (incl. travel days), days, cities, photo count, 4 covers (first assets of the trip), a badge (New / Existing / Adopt album / Ignored / Locked / No longer detected / Merged), and the adopt switch when an existing album is proposed. Counts per reason are shown per photo in the trip's photo grid rather than on the card. Apply shows a confirmation with counts, is disabled once applied, and the backend refuses a second apply.
+  - Note: the backend's `JobView` gains `typeKind` (`assets` / `groups`) so the run and job pages know the kind without loading all job types.
+- [x] Trip detail: existing candidate grid filtered by `group`, reason chips.
+  - Note: a separate read-only grid (`trip-assets.ts`, virtualised, reasons as readable chips: away, travel day, camera without GPS, …). The candidate review grid's per-photo ticks don't apply to group jobs: apply syncs whole trips, and photos are kept out with the exclusion album or by removing them in Immich.
+- [x] Job page: Trips tab (status, range, Immich album link, ignore / lock / unlock) and Home panel.
+  - Note: `pages/job-editor/trips-panel.ts` in the job page's side column (no tabs). Album links go to the Immich web UI (from `IMMICH_URL`). It also shows photos removed by you and adopted albums. Actions: ignore, lock, activate. Home per period comes from `GET /jobs/:id/insights` (hidden if unavailable).
+- [x] Job editor: hide target album for `kind: 'groups'`; params form generated as usual (advanced group collapsed).
+  - Note: generic: any nested param object named `advanced` renders as a collapsed `<details>`. For group jobs the exclusion album hint and default (`<job name> – excluded`) change, "Full rescan" is hidden, and the dashboard says "one album per trip". `humanize()` writes GPS in capitals.
+- [x] `data-testid`s; lazy routes; keep Formly on editor routes only.
+  - Note: the new components are in the existing lazy routes (run detail, job editor); the initial bundle is unchanged.
 
-- [ ] **Tests:** component tests; Playwright: dry run → review list → untick → apply → trips tab.
+- [x] **Tests:** component tests; Playwright: dry run → review list → untick → apply → trips tab.
+  - Note: `trip-review.spec.ts` (helpers + component with mocked HTTP: cards, untick, apply) and `trips-panel.spec.ts`. Playwright `e2e/trips.e2e.ts`: create a trip job (target hidden, advanced collapsed) → dry run → 2 trips → photos of a trip → untick → apply → job page with Active / Ignored → activate. The e2e stack's fake Immich gained `/users/me`, album descriptions/dates/rename and a 302-photo trip library (the screenshot smoke test's scanned count grows accordingly).
 
-- [ ] **Done when:** a trip job can be created, previewed, tuned and applied entirely from the UI.
+- [x] **Done when:** a trip job can be created, previewed, tuned and applied entirely from the UI.
 
 ---
 

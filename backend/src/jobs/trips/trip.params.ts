@@ -100,7 +100,10 @@ export const TripParams = z.object({
     .describe(
       'Photos without GPS taken during a trip: camera photos only, all, or none',
     ),
-  includeVideos: z.boolean().default(true).describe('Include videos'),
+  includeVideos: z
+    .boolean()
+    .default(true)
+    .describe('Videos join trip albums like photos'),
   includeArchived: z
     .boolean()
     .default(false)

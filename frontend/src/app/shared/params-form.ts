@@ -11,6 +11,7 @@ export function humanize(key: string): string {
     .replace(/[_-]+/g, ' ')
     .toLowerCase()
     .replace(/\bclip\b/g, 'CLIP')
+    .replace(/\bgps\b/g, 'GPS')
     .replace(/\bios\b/g, 'iOS')
     .replace(/\btop n\b/g, 'top N');
   return words.charAt(0).toUpperCase() + words.slice(1);

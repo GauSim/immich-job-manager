@@ -1,0 +1,90 @@
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.spacer {
+  flex: 1;
+}
+.empty {
+  margin: 24px 0;
+}
+.trips {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.trip {
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 12px;
+  padding: 12px 16px;
+  background: var(--mat-sys-surface);
+}
+.trip.unticked {
+  opacity: 0.6;
+}
+.trip.inactive {
+  background: var(--mat-sys-surface-container-low);
+}
+.head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.check {
+  width: 18px;
+  height: 18px;
+}
+.title {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.name {
+  font: var(--mat-sys-title-medium);
+}
+.small {
+  font: var(--mat-sys-body-small);
+}
+.badge {
+  font: var(--mat-sys-label-medium);
+  padding: 2px 10px;
+  border-radius: 12px;
+  white-space: nowrap;
+  background: var(--mat-sys-surface-container-high);
+}
+.badge.new {
+  background: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
+}
+.badge.adopt,
+.badge.update {
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+.badge.warn {
+  background: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
+}
+.covers {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 4px 30px;
+}
+.cover {
+  width: 96px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--mat-sys-surface-container);
+}
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: 30px;
+  flex-wrap: wrap;
+}

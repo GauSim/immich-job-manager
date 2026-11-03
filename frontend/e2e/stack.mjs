@@ -28,9 +28,64 @@ for (let c = 0; c < COPIES; c++) {
   for (const a of sample) {
     library.push({
       checksum: `${c}-${a.id}`,
+      ownerId: 'me',
       ...a,
       id: uuid(`${c}-${a.id}`),
       originalFileName: c ? a.originalFileName.replace(/(\.\w+)$/, `-${c}$1`) : a.originalFileName,
+    });
+  }
+}
+
+// Trip albums: phone photos with GPS. Home in Berlin, Bangkok 2026-03-01 … 03-10,
+// Prague 2026-04-16 … 04-18 (two photos per day). TRIP_PHOTOS in e2e/trips.e2e.ts must match.
+const PLACES = {
+  home: { lat: 52.52, lon: 13.405, country: 'Germany', city: 'Berlin', tz: 1 },
+  bangkok: { lat: 13.75, lon: 100.5, country: 'Thailand', city: 'Bangkok', tz: 7 },
+  prague: { lat: 50.08, lon: 14.43, country: 'Czechia', city: 'Prague', tz: 1 },
+};
+const placeOn = (day) =>
+  day >= '2026-03-01' && day <= '2026-03-10'
+    ? PLACES.bangkok
+    : day >= '2026-04-16' && day <= '2026-04-18'
+      ? PLACES.prague
+      : PLACES.home;
+let tripPhotos = 0;
+for (let t = Date.UTC(2026, 0, 1); t <= Date.UTC(2026, 4, 31); t += 86_400_000) {
+  const day = new Date(t).toISOString().slice(0, 10);
+  const p = placeOn(day);
+  for (const hour of [9, 19]) {
+    const local = `${day}T${String(hour).padStart(2, '0')}:00:00.000`;
+    const n = ++tripPhotos;
+    library.push({
+      id: uuid(`trip-${n}`),
+      ownerId: 'me',
+      checksum: `trip-${n}`,
+      type: 'IMAGE',
+      visibility: 'timeline',
+      isTrashed: false,
+      originalFileName: `IMG_${String(n).padStart(4, '0')}.HEIC`,
+      originalMimeType: 'image/heic',
+      width: 4032,
+      height: 3024,
+      fileCreatedAt: new Date(Date.parse(`${local}Z`) - p.tz * 3_600_000).toISOString(),
+      localDateTime: `${local}Z`,
+      updatedAt: '2026-06-01T00:00:00.000Z',
+      exifInfo: {
+        make: 'Apple',
+        model: 'iPhone 16',
+        lensModel: null,
+        exposureTime: '1/120',
+        fNumber: 1.8,
+        exifImageWidth: 4032,
+        exifImageHeight: 3024,
+        description: '',
+        latitude: p.lat,
+        longitude: p.lon,
+        city: p.city,
+        state: null,
+        country: p.country,
+        timeZone: `UTC+${p.tz}`,
+      },
     });
   }
 }
@@ -101,6 +156,8 @@ const immich = createServer((req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/server/version')
       return json(res, 200, { major: 3, minor: 3, patch: 5 });
     const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString() || '{}') : {};
+    if (req.method === 'GET' && url.pathname === '/api/users/me')
+      return json(res, 200, { id: 'me', email: 'me@example.com', name: 'Me' });
     if (req.method === 'GET' && url.pathname === '/api/albums') {
       const name = url.searchParams.get('name');
       return json(
@@ -108,13 +165,36 @@ const immich = createServer((req, res) => {
         200,
         [...albums.entries()]
           .filter(([, a]) => !name || a.albumName.includes(name))
-          .map(([id, a]) => ({ id, albumName: a.albumName, assetCount: a.members.size })),
+          .map(([id, a]) => {
+            const dates = library
+              .filter((x) => a.members.has(x.id) && x.localDateTime)
+              .map((x) => x.localDateTime)
+              .sort();
+            return {
+              id,
+              albumName: a.albumName,
+              description: a.description ?? '',
+              assetCount: a.members.size,
+              ...(dates.length ? { startDate: dates[0], endDate: dates[dates.length - 1] } : {}),
+            };
+          }),
       );
     }
     if (req.method === 'POST' && url.pathname === '/api/albums') {
       const id = `00000000-0000-4000-8000-${String(albums.size + 1).padStart(12, '0')}`;
-      albums.set(id, { albumName: body.albumName, members: new Set() });
+      albums.set(id, {
+        albumName: body.albumName,
+        description: body.description,
+        members: new Set(),
+      });
       return json(res, 201, { id, albumName: body.albumName, assetCount: 0 });
+    }
+    const albumPatch = /^\/api\/albums\/([^/]+)$/.exec(url.pathname);
+    if (albumPatch && req.method === 'PATCH') {
+      const album = albums.get(albumPatch[1]);
+      if (!album) return json(res, 400, { message: 'Album not found' });
+      if (body.albumName) album.albumName = body.albumName;
+      return json(res, 200, { id: albumPatch[1], albumName: album.albumName });
     }
     const albumAssets = /^\/api\/albums\/([^/]+)\/assets$/.exec(url.pathname);
     if (albumAssets && (req.method === 'PUT' || req.method === 'DELETE')) {
@@ -198,7 +278,9 @@ process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
 immich.listen(IMMICH_PORT, '127.0.0.1', () => {
-  console.log(`fake Immich on :${IMMICH_PORT} with ${library.length} assets`);
+  console.log(
+    `fake Immich on :${IMMICH_PORT} with ${library.length} assets (${tripPhotos} trip photos)`,
+  );
   backend = spawn(process.execPath, ['dist/main.js'], {
     cwd: resolve(here, '../../backend'),
     stdio: 'inherit',

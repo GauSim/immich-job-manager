@@ -29,6 +29,7 @@ import { confirm } from '../../shared/confirm-dialog';
 import { parseServerDate, relativeTime } from '../../shared/format';
 import { ParamsForm } from '../../shared/params-form';
 import { StatusChip } from '../../shared/status-chip';
+import { TripsPanel } from './trips-panel';
 
 const clone = <T>(v: T): T => structuredClone(v);
 
@@ -48,6 +49,7 @@ const clone = <T>(v: T): T => structuredClone(v);
     MatTooltipModule,
     ParamsForm,
     StatusChip,
+    TripsPanel,
   ],
   templateUrl: './job-editor.html',
   styleUrl: './job-editor.scss',
@@ -96,13 +98,19 @@ export class JobEditor {
     () => this.types().find((t) => t.id === this.typeId()) ?? null,
   );
   protected readonly busy = computed(() => this.runs().some((r) => isActive(r.status)));
+  /** Group jobs (e.g. trip albums): one album per group, no target album. */
+  protected readonly groupJob = computed(() => this.type()?.kind === 'groups');
 
   constructor() {
     this.form.controls.typeId.valueChanges.subscribe((typeId) => {
       this.typeId.set(typeId);
+      this.applyKind();
       if (this.isNew()) this.resetParams(this.newJobParams(typeId));
     });
     this.form.controls.targetAlbumName.valueChanges.subscribe(() =>
+      this.exclusionPlaceholder.set(this.defaultExclusion()),
+    );
+    this.form.controls.name.valueChanges.subscribe(() =>
       this.exclusionPlaceholder.set(this.defaultExclusion()),
     );
     effect(() => {
@@ -113,8 +121,19 @@ export class JobEditor {
 
   protected readonly exclusionPlaceholder = signal('');
   private defaultExclusion(): string {
-    const target = this.form.controls.targetAlbumName.value.trim();
-    return target ? `${target} – excluded` : '';
+    // Group jobs have no target album; their default is `<job name> – excluded`.
+    const base = this.groupJob()
+      ? this.form.controls.name.value.trim()
+      : this.form.controls.targetAlbumName.value.trim();
+    return base ? `${base} – excluded` : '';
+  }
+
+  /** Group jobs have no target album: the field is hidden and not validated. */
+  private applyKind(): void {
+    const target = this.form.controls.targetAlbumName;
+    if (this.groupJob()) target.disable({ emitEvent: false });
+    else target.enable({ emitEvent: false });
+    this.exclusionPlaceholder.set(this.defaultExclusion());
   }
 
   private load(id: string | undefined): void {
@@ -148,7 +167,7 @@ export class JobEditor {
           this.form.reset({ syncMode: 'dry-run', enabled: false, typeId: first?.id ?? '' });
         }
         this.typeId.set(this.form.controls.typeId.value);
-        this.exclusionPlaceholder.set(this.defaultExclusion());
+        this.applyKind();
         this.loading.set(false);
       },
       error: () => this.loading.set(false),
@@ -179,7 +198,7 @@ export class JobEditor {
     const v = this.form.getRawValue();
     const input: JobInput = {
       name: v.name.trim(),
-      targetAlbumName: v.targetAlbumName.trim(),
+      ...(this.groupJob() ? {} : { targetAlbumName: v.targetAlbumName.trim() }),
       exclusionAlbumName: v.exclusionAlbumName.trim() || null,
       params: clone(this.paramsModel()),
       syncMode: v.syncMode,

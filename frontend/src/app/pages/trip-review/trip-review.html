@@ -1,0 +1,103 @@
+<div class="toolbar">
+  <span class="muted" data-testid="trip-summary">{{ summaryText() || 'No trips found' }}</span>
+  <span class="spacer"></span>
+  <button matButton (click)="setAll(true)" [disabled]="!groups().length || !!appliedAt()">
+    Tick all
+  </button>
+  <button matButton (click)="setAll(false)" [disabled]="!groups().length || !!appliedAt()">
+    Untick all
+  </button>
+  <button
+    matButton="filled"
+    (click)="apply()"
+    [disabled]="applying() || !!appliedAt() || !groups().length"
+    [matTooltip]="appliedAt() ? 'Already applied; start a new dry run to apply again' : ''"
+    data-testid="apply-trips"
+  >
+    Apply trips<mat-icon iconPositionEnd>chevron_right</mat-icon>
+  </button>
+</div>
+
+@if (loading()) {
+  <mat-progress-bar mode="indeterminate" />
+}
+
+@if (!loading() && groups().length === 0) {
+  <p class="muted empty">
+    No trips found. Run the trip detection tuning CLI (backend README) to see why.
+  </p>
+}
+
+<div class="trips">
+  @for (g of groups(); track g.key) {
+    @let b = badge(g);
+    <section
+      class="trip"
+      [class.unticked]="selectable(g) && !g.selected"
+      [class.inactive]="!selectable(g)"
+      data-testid="trip"
+    >
+      <div class="head">
+        @if (selectable(g)) {
+          <input
+            type="checkbox"
+            class="check"
+            [checked]="g.selected"
+            [disabled]="!!appliedAt()"
+            (change)="toggle(g)"
+            [attr.aria-label]="'Include ' + g.name"
+            data-testid="trip-check"
+          />
+        }
+        <div class="title">
+          <span class="name" data-testid="trip-name">{{ g.name }}</span>
+          <span class="muted small">
+            {{ range(g) }} · {{ days(g) }} days
+            @if (g.summary.cities?.length) {
+              · {{ g.summary.cities!.join(', ') }}
+            }
+            @if (g.ongoing) {
+              · ongoing
+            }
+          </span>
+        </div>
+        <span class="badge" [class]="'badge ' + b.kind" data-testid="trip-badge">{{
+          b.label
+        }}</span>
+      </div>
+
+      @if (selectable(g)) {
+        <div class="covers">
+          @for (id of covers()[g.key] ?? []; track id) {
+            <img [src]="thumbnail(id)" alt="" loading="lazy" class="cover" />
+          }
+        </div>
+        <div class="foot">
+          <span class="muted small">{{ g.assetCount }} photos</span>
+          @if (g.action === 'create' && g.summary.adoptAlbumId) {
+            <mat-slide-toggle
+              [checked]="!!g.albumId"
+              [disabled]="!!appliedAt()"
+              (change)="setAdopt(g, $event.checked)"
+              data-testid="trip-adopt"
+              >Use existing album "{{ g.summary.adoptAlbumName }}"</mat-slide-toggle
+            >
+          }
+          <span class="spacer"></span>
+          <button matButton (click)="toggleExpanded(g)" data-testid="trip-expand">
+            {{ expanded() === g.key ? 'Hide photos' : 'Show photos' }}
+          </button>
+        </div>
+        @if (expanded() === g.key) {
+          <app-trip-assets [runId]="runId()" [group]="g.key" />
+        }
+      } @else if (g.action === 'merged' && g.summary.mergedIntoName) {
+        <p class="muted small">
+          Now part of "{{ g.summary.mergedIntoName }}". Its album stays as it is.
+        </p>
+      } @else if (g.action === 'orphaned') {
+        <p class="muted small">Not detected anymore. Its album stays as it is.</p>
+      }
+    </section>
+  }
+</div>
