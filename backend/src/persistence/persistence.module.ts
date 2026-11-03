@@ -1,13 +1,15 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import type { AppConfig } from '../config/config.schema.js';
 import { APP_CONFIG } from '../config/config.module.js';
 import { buildDataSourceOptions, databasePath } from './data-source.options.js';
 import { ENTITIES } from './entities/index.js';
+import { SqliteService } from './sqlite.service.js';
 
 /**
  * SQLite via TypeORM. Migrations run on boot; `synchronize` is always off.
  */
+@Global()
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({
@@ -20,6 +22,7 @@ import { ENTITIES } from './entities/index.js';
     }),
     TypeOrmModule.forFeature(ENTITIES),
   ],
-  exports: [TypeOrmModule],
+  providers: [SqliteService],
+  exports: [TypeOrmModule, SqliteService],
 })
 export class PersistenceModule {}

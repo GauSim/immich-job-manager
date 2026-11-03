@@ -64,6 +64,29 @@ describe('migrations', () => {
     ]);
   });
 
+  it('upgrades an existing database without losing rows', async () => {
+    await ds.undoLastMigration({ transaction: 'each' }); // back to the Init schema
+    await ds.query(
+      `INSERT INTO job (id, name, type_id, params) VALUES ('j1', 'old', 'noop-test', '{}')`,
+    );
+    await ds.query(`INSERT INTO job_run (id, job_id) VALUES ('r1', 'j1')`);
+    await ds.query(
+      `INSERT INTO run_log (run_id, ts, level, message) VALUES ('r1', '2026-01-01', 'info', 'x')`,
+    );
+    await ds.runMigrations({ transaction: 'each' });
+    expect(
+      await ds.query(
+        'SELECT id, target_album_name, exclusion_album_name FROM job',
+      ),
+    ).toEqual([
+      { id: 'j1', target_album_name: '', exclusion_album_name: null },
+    ]);
+    expect(await ds.query('SELECT id FROM job_run')).toEqual([{ id: 'r1' }]);
+    expect(await ds.query('SELECT COUNT(*) AS n FROM run_log')).toEqual([
+      { n: 1 },
+    ]);
+  });
+
   it('round-trips entities and cascades deletes', async () => {
     const job = await ds.getRepository(JobEntity).save({
       name: 'Screenshots',

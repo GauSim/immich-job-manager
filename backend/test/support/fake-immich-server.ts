@@ -149,3 +149,42 @@ export function searchResponse(
     },
   };
 }
+
+/**
+ * Serves a fake library of `count` images on `/search/metadata` with Immich-style
+ * opaque cursors. `hooks.beforePage(offset)` may delay or return an error response.
+ */
+export function serveLibrary(
+  server: FakeImmichServer,
+  count: number,
+  hooks: {
+    beforePage?: (
+      offset: number,
+    ) => Promise<CannedResponse | void> | CannedResponse | void;
+  } = {},
+): void {
+  const assets = Array.from({ length: count }, (_, i) =>
+    fakeAsset(`asset-${i}`),
+  );
+  server.on('POST /search/metadata', async (req) => {
+    const body = req.body as { cursor?: string; size?: number };
+    const offset = body.cursor
+      ? (
+          JSON.parse(Buffer.from(body.cursor, 'base64').toString()) as {
+            offset: number;
+          }
+        ).offset
+      : 0;
+    const override = await hooks.beforePage?.(offset);
+    if (override) return override;
+    const size = body.size ?? 1000;
+    const items = assets.slice(offset, offset + size);
+    const next =
+      offset + size < count
+        ? Buffer.from(JSON.stringify({ offset: offset + size })).toString(
+            'base64',
+          )
+        : null;
+    return { json: searchResponse(items, next) };
+  });
+}

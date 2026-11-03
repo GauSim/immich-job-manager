@@ -131,29 +131,40 @@ Tasks:
 
 **Goal:** generic job execution, before any real job logic.
 
-**Status:** not started
+**Status:** done (2026-11-03) – verified against a throwaway Immich v3.3.5; pending: noop run over the real library
 
 Tasks:
 
-- [ ] `core/job-type.ts`: `JobType`, `JobContext`, `Candidate`, `CandidateBatch` interfaces.
-- [ ] `@AlbumJobType()` decorator + `JobTypesModule` discovery via `DiscoveryService`; params JSON Schema via `zod-to-json-schema`.
-- [ ] Blocks: `metadataSource` (paged, cursor = page number + `updatedAfter`), `filenameScorer`, `exifScorer`, `albumSource`.
+- [x] `core/job-type.ts`: `JobType`, `JobContext`, `Candidate`, `CandidateBatch` interfaces.
+  - Note: `JobContext` has no `features` (`AssetFeatureCache`) yet; added in phase 6. `CandidateBatch.cursor` is `string | null` (null = source exhausted) and may carry `filesRead` / `cacheHits`. Added `runId`, `jobId`, `dryRun` to the context.
+- [x] `@AlbumJobType()` decorator + `JobTypesModule` discovery via `DiscoveryService`; params JSON Schema via `zod-to-json-schema`.
+  - Note: JSON Schema via Zod 4's built-in `z.toJSONSchema` (draft-07, input types incl. defaults) instead of `zod-to-json-schema`. The registry rejects duplicate ids and invalid `defaultParams` at boot. Job types are listed in `JOB_TYPES` (`src/jobs/job-types.module.ts`).
+- [x] Blocks: `metadataSource` (paged, cursor = page number + `updatedAfter`), `filenameScorer`, `exifScorer`, `albumSource`.
   - Note (phase 0 spike): cursor = Immich's opaque `nextCursor` (offset-based, so resume is at-least-once); `updatedAfter` → `filter.updatedAt.gt`.
-- [ ] `RunQueue`: one run per job, `MAX_CONCURRENT_RUNS` overall, FIFO.
-- [ ] `RunExecutor`:
-  - [ ] Create `job_run`, iterate batches, persist each batch + cursor + totals in **one transaction per page**.
-  - [ ] `AbortController` cancellation.
-  - [ ] On boot: `running` → `interrupted`.
-  - [ ] Resume from stored cursor.
-- [ ] `EventsModule`: SSE per run, throttled to 1 progress event/s, plus log lines.
-- [ ] Jobs API: `GET /job-types`, CRUD `/jobs`, `POST /jobs/:id/runs`, `GET /jobs/:id/runs`, `GET /runs/:id`, `POST /runs/:id/cancel`, `POST /runs/:id/resume`, `GET /runs/:id/events`.
-- [ ] A `noop-test` job type that pages through the library and matches nothing.
+  - Note: plus `scoreAsset` (sum capped at 1, reasons, "decisive" signals for the iOS tag) and EXIF predicates (`hasNoCameraExif`, `mimeTypeIs`, `dimensionsIn`, `aspectRatioAtLeast`). Filename patterns: case-insensitive substrings (typographic apostrophes normalised) or `/regex/flags`.
+- [x] `RunQueue`: one run per job, `MAX_CONCURRENT_RUNS` overall, FIFO.
+  - Note: the API enforces "one active run per job" atomically in SQL (409 otherwise); the queue also never starts two runs of a job and lets runs of other jobs pass a blocked one.
+- [x] `RunExecutor`:
+  - [x] Create `job_run`, iterate batches, persist each batch + cursor + totals in **one transaction per page**.
+    - Note: the page transaction is a *synchronous* better-sqlite3 transaction (`SqliteService`), because TypeORM's SQLite driver shares one query runner and concurrent async transactions would interleave. Dry runs upsert `run_candidate` rows in the same transaction. The run is created by the API, not the executor.
+  - [x] `AbortController` cancellation.
+  - [x] On boot: `running` → `interrupted`.
+    - Note: queued runs are re-queued on boot; on shutdown active runs are interrupted (resumable) before the DB closes.
+  - [x] Resume from stored cursor.
+    - Note: resume reuses the same run (totals continue); allowed for `interrupted` and `failed` runs.
+- [x] `EventsModule`: SSE per run, throttled to 1 progress event/s, plus log lines.
+  - Note: events `status` (snapshot first, final last; the stream then ends), `progress` (leading + trailing throttle), `log`. 15 s heartbeat comments.
+- [x] Jobs API: `GET /job-types`, CRUD `/jobs`, `POST /jobs/:id/runs`, `GET /jobs/:id/runs`, `GET /runs/:id`, `POST /runs/:id/cancel`, `POST /runs/:id/resume`, `GET /runs/:id/events`.
+  - Note: added `GET /runs/:id/logs?after=` (for the run detail page). Validation errors use Immich's shape `{ message: 'Validation failed', errors: [{ path, message }] }`, incl. job params (`['params', …]`) and cron. Album names are **job-level** fields (`targetAlbumName`, `exclusionAlbumName`, default `<target> – excluded`) rather than job-type params as in SDD §6.3, because album sync is core code; migration `JobAlbumNames` adds them. `dryRun: false` on a job in `dry-run` sync mode → 400. Real runs only count matches until phase 5 (logged as a warning).
+- [x] A `noop-test` job type that pages through the library and matches nothing.
 
-- [ ] **Deliverables:** start, cancel and resume a run via API; watch progress via SSE.
+- [x] **Deliverables:** start, cancel and resume a run via API; watch progress via SSE.
 
-- [ ] **Tests:** runner with a fake source: cursor resume after simulated crash, cancellation, flat memory over 100k fake assets.
+- [x] **Tests:** runner with a fake source: cursor resume after simulated crash, cancellation, flat memory over 100k fake assets.
+  - Note: also shutdown interrupt + resume after reboot, boot recovery, page-before-next-page ordering, throttling, queue rules, blocks; API e2e incl. SSE, 409s, resume after an Immich error (only the failed page is fetched again). 100k assets: heap growth bounded (< 64 MB).
 
 - [ ] **Done when:** a noop run over your full library completes and reports the correct `scanned` count.
+  - Note: verified against the throwaway Immich v3.3.5 (6 assets incl. 1 archived → `scanned: 6`, pages of 2 via real cursors; images/timeline only → 5). Still to run against the real library.
 
 ---
 
@@ -168,7 +179,8 @@ Tasks:
 - [ ] `ScreenshotParams` Zod schema with defaults (threshold 0.6, patterns, resolution list, `readIosTag` false for now, CLIP disabled).
 - [ ] Scoring: filename, PNG, no camera EXIF, screen dimensions. Images only (`type: IMAGE`).
 - [ ] Reasons per candidate.
-- [ ] Dry-run persistence: `run_candidate` rows (batched), `selected = true` by default.
+- [x] Dry-run persistence: `run_candidate` rows (batched), `selected = true` by default.
+  - Note: done in phase 2 as part of the runner's page transaction (`RunStore`).
 - [ ] Candidates API: `GET /runs/:id/candidates` (paged, sort by score, filter by score band), `PATCH /runs/:id/candidates` (tick/untick).
 - [ ] Thumbnail proxy `GET /assets/:id/thumbnail` (only assets present in a run).
 - [ ] Fixture set: anonymised metadata JSON for screenshots, camera photos and edge cases (exported graphics, wallpapers).

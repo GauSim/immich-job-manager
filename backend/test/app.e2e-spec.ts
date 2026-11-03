@@ -8,6 +8,7 @@ import { App } from 'supertest/types.js';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app.module.js';
 import { loadConfig } from '../src/config/config.schema.js';
+import { MIGRATIONS } from '../src/persistence/migrations/index.js';
 import { ImmichIncompatibleError } from '../src/immich/immich.errors.js';
 import { FakeImmichServer } from './support/fake-immich-server.js';
 
@@ -63,7 +64,7 @@ describe('App (e2e)', () => {
     const migrations = await a
       .get(DataSource)
       .query('SELECT name FROM migrations');
-    expect(migrations).toHaveLength(1);
+    expect(migrations).toHaveLength(MIGRATIONS.length);
   });
 
   it('keeps an incoming x-request-id', async () => {

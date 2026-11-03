@@ -2,7 +2,7 @@
 
 Self-hosted companion app for [Immich](https://immich.app) v3: rerunnable, schedulable batch jobs that select assets (first job: screenshots) and keep them in an Immich album. Talks to Immich only through its REST API with a scoped API key.
 
-> Status: **phase 1** – backend foundation (config, database, Immich client, health). No jobs yet.
+> Status: **phase 2** – job framework and runner (REST API, runs with cancel/resume, live progress). Only a test job type so far; no UI yet.
 
 ## Docs
 
@@ -64,6 +64,29 @@ All settings are environment variables, validated at boot; an invalid value stop
 ### Immich API key permissions
 
 Create the key in Immich (Account settings → API keys) with exactly: `server.about`, `asset.read`, `asset.view`, `asset.download`, `album.read`, `album.create`, `albumAsset.create`, `albumAsset.delete`. Details in [the API notes](docs/immich-api-notes.md#2-api-key-permissions).
+
+## API (so far)
+
+All under `/api`. Validation errors: `400 { message: "Validation failed", errors: [{ path, message }] }`.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/job-types` | Job types with params JSON Schema and defaults |
+| GET, POST | `/jobs` | List / create jobs |
+| GET, PATCH, DELETE | `/jobs/:id` | Read / update / delete (never touches Immich albums) |
+| POST | `/jobs/:id/runs` | Start a run `{ dryRun?, fullRescan? }` (409 if one is already active) |
+| GET | `/jobs/:id/runs` | Run history (`?limit=&offset=`) |
+| GET | `/runs/:id` | Run status and totals |
+| POST | `/runs/:id/cancel`, `/runs/:id/resume` | Cancel; resume an interrupted or failed run from its cursor |
+| GET | `/runs/:id/logs` | Run log (`?after=<id>`) |
+| GET | `/runs/:id/events` | Server-sent events: `status`, `progress` (≤ 1/s), `log` |
+
+```bash
+curl -X POST localhost:3000/api/jobs -H 'content-type: application/json' \
+  -d '{"name":"Test","typeId":"noop-test","targetAlbumName":"Test"}'
+curl -X POST localhost:3000/api/jobs/<id>/runs -H 'content-type: application/json' -d '{}'
+curl -N localhost:3000/api/runs/<run-id>/events
+```
 
 ## Health
 

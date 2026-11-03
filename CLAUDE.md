@@ -50,6 +50,9 @@ Before committing, run lint, format check, tests and build for every package you
 ## Conventions
 
 - Talk to Immich only through `ImmichClient` (`backend/src/immich/`), never raw `fetch` or the SDK elsewhere.
+- Database writes: never TypeORM transactions or `save()` (TypeORM's SQLite driver shares one query runner, so async transactions collide). Multi-statement writes go through `SqliteService.transaction()` (synchronous better-sqlite3); otherwise single-statement `insert` / `update` / `delete`.
+- Review generated migrations: for SQLite TypeORM often rebuilds tables (DROP + copy), which cascades deletes through foreign keys. Prefer hand-written `ALTER TABLE … ADD COLUMN`.
+- New job types: a provider with `@AlbumJobType()` implementing `JobType` (`src/core/job-type.ts`), listed in `JOB_TYPES` (`src/jobs/job-types.module.ts`). Use the blocks in `src/core/blocks/`; yield one page at a time.
 - Config comes from the injected `APP_CONFIG` (`AppConfig`), never `process.env` outside `config/` and `main.ts`.
 - Immich v3.x only; `@immich/sdk` pinned to the server's version.
 - All HTTP routes under `/api`.
