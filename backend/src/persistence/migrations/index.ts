@@ -2,6 +2,7 @@ import { Init1793713360422 } from './1793713360422-Init.js';
 import { JobAlbumNames1793715748738 } from './1793715748738-JobAlbumNames.js';
 import { CandidateFileName1793718000000 } from './1793718000000-CandidateFileName.js';
 import { RunAppliedAt1793720000000 } from './1793720000000-RunAppliedAt.js';
+import { AssetIndex1793722000000 } from './1793722000000-AssetIndex.js';
 
 /**
  * Every migration, in order. Generate new ones with
@@ -14,4 +15,5 @@ export const MIGRATIONS = [
   JobAlbumNames1793715748738,
   CandidateFileName1793718000000,
   RunAppliedAt1793720000000,
+  AssetIndex1793722000000,
 ];

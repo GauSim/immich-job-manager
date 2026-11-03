@@ -14,6 +14,7 @@ import { LoggingModule } from './logging/logging.module.js';
 import { PersistenceModule } from './persistence/persistence.module.js';
 import { SyncModule } from './sync/sync.module.js';
 import { FeaturesModule } from './features/asset-feature-cache.js';
+import { AssetIndexModule } from './asset-index/asset-index.service.js';
 import { SettingsModule } from './settings/settings.service.js';
 
 @Module({})
@@ -31,6 +32,7 @@ export class AppModule {
         JobTypesModule,
         SyncModule,
         FeaturesModule,
+        AssetIndexModule,
         SettingsModule,
         AuthModule,
         HealthModule,

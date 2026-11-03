@@ -148,7 +148,7 @@ Works on the real instance (ML running): 5 results for a text query, paginated l
 
 `docs/spike-out/spike-report.json` (first 1,000 assets of the real library, rerun 2026-11-03) was anonymised into `backend/test/fixtures/real-library-sample.json` with `tools/immich-spike/anonymise-metadata.py` (file-name patterns, MIME, dimensions, camera EXIF and description only; no dates, GPS or places). Of 999 images: 96 tagged screenshots (95 PNG 1320×2868, 1 JPEG), 679 camera photos (HEIC/JPEG), 224 others (camera-less JPEGs from messengers/apps, 17 untagged PNGs — mostly generated or saved images at 1024×1536, 1672×941 …). With the default parameters the screenshot job matches all 96 tagged screenshots (score 1.0), no camera photo, and 1 untagged PNG (887×1774, aspect 2.0, score 0.6).
 
-> Note: the committed `docs/spike-out/spike-report.json` itself contains real file names, GPS coordinates and places; consider removing it from the repository if it is ever made public.
+> Note: `docs/spike-out/spike-report.json` contained real file names, GPS coordinates and places and was removed from the repository (2026-11-03). Spike reports stay local in `tools/immich-spike/out/`.
 
 ## 9. Impact on the plan / SDD
 
@@ -219,7 +219,31 @@ So `country` is set for almost every GPS asset on land, and `null` with GPS most
 
 ### 10.6 Real-library numbers (SDD open question 3)
 
-Pending: run `SPIKE_SCRIPT=trips` on the NAS and copy `out/trips-stats.json` to `docs/spike-out/trips-stats.json`. Fill in GPS share per device class, the share of days with only camera photos without GPS, and how many partner assets the search returns.
+`npm run trips` against the real instance (v3.3.5, 2026-11-03): 32,029 assets in 33 pages, **7.7 s** for the full walk. The stats file is not committed (`docs/spike-out/` was removed on purpose); the numbers are summarised here.
+
+| Own assets | Total | GPS | `timeZone` null |
+| --- | --- | --- | --- |
+| Images, phone | 17,941 | 92 % | 5 % (all without GPS) |
+| Images, camera | 5,671 | 9 % | 85 % |
+| Images, no camera EXIF (messenger, edited, scans) | 4,701 | 3 % | 96 % |
+| Images, screenshot | 236 | 0 % | 100 % |
+| Videos, phone | 2,165 | 97 % | 0 % |
+| Videos, camera | 266 | 93 % | 0 % |
+| Videos, no camera EXIF | 1,049 | 16 % | 1 % |
+
+- **GPS with a country:** 99.5 % (78 phone assets at sea have none). Every asset with `timeZone = null` has no GPS, which matches §10.3.
+- **Days** (local, own assets, no screenshots): 3,235 days with assets; 2,323 (72 %) have at least one GPS asset. On 112 days, camera photos without GPS sit next to GPS assets; the fill covers these. On 208 days there are camera photos but **no GPS at all**, so trips on those days cannot be detected.
+- **Years:** almost no GPS before 2011 (2002–2010: ~1,230 assets, 1 with GPS). GPS share is ~25 % for 2011–2014, ~45–60 % for 2015–2017 and 65–85 % from 2018. Trips before 2011 are out of reach; 2011–2016 will be partial.
+- **Countries:** 30 distinct. The top country holds 80.7 % of GPS days (1,944 days; the next is 57), so home inference is unambiguous on this library.
+- **Partners:** none share with this user, so no partner assets appear in search. The album-add test was not run; §10.2 stays source-based.
+- **Albums:** one album (the job's own Screenshots album). There are no hand-made trip albums, so adoption (SDD §7.4) has nothing to adopt here.
+
+Consequences for the design:
+
+1. Detection is driven by **phone** photos and videos. **Camera** images matter for the fill (5,671 assets, 85 % without a real instant), so matching them by local time (SDD §5.5) is essential, not an edge case.
+2. "Camera only" fill leaves out 4,701 images without camera EXIF (3 % GPS). That matches the interview decision (no messenger or app images).
+3. A **full index refresh costs ~8 s**. Refreshing in full on every run is simpler than incremental refresh plus deletion handling (SDD §4); T1 starts with full refreshes only.
+4. Partner support and adoption of existing albums cannot be checked on this library. Both stay in the design but move to low priority.
 
 ### 10.7 API key permissions for the trip job
 
