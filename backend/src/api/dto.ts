@@ -14,7 +14,8 @@ const cron = z
 export const CreateJobDto = z.strictObject({
   name,
   typeId: z.string().min(1, 'is required'),
-  targetAlbumName: name,
+  /** Required for asset jobs; group jobs (e.g. trip albums) create one album per group. */
+  targetAlbumName: name.optional(),
   /** null/omitted → `<target> – excluded` */
   exclusionAlbumName: name.nullish(),
   params: z.record(z.string(), z.unknown()).default({}),
@@ -61,6 +62,8 @@ export const CandidateQuery = z.object({
   minScore: score.optional(),
   maxScore: score.optional(),
   selected: bool.optional(),
+  /** Group jobs: only the assets of this proposed group (`run_group.group_key`). */
+  group: z.string().min(1).max(200).optional(),
 });
 export type CandidateQuery = z.infer<typeof CandidateQuery>;
 
@@ -99,3 +102,16 @@ export const UpdateSettingsDto = z.strictObject({
   'defaults.threshold': z.number().min(0).max(1).optional(),
 });
 export type UpdateSettingsDto = z.infer<typeof UpdateSettingsDto>;
+
+/** `PATCH /runs/:id/groups` — tick or untick proposed groups (all when `keys` is omitted). */
+export const UpdateRunGroupsDto = z.strictObject({
+  selected: z.boolean(),
+  keys: z.array(z.string().min(1)).min(1).max(10_000).optional(),
+});
+export type UpdateRunGroupsDto = z.infer<typeof UpdateRunGroupsDto>;
+
+/** `PATCH /jobs/:id/groups/:groupId` — user decision on a stored group. */
+export const UpdateJobGroupDto = z.strictObject({
+  status: z.enum(['active', 'ignored', 'locked']),
+});
+export type UpdateJobGroupDto = z.infer<typeof UpdateJobGroupDto>;

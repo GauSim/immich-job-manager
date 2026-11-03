@@ -3,6 +3,7 @@ import { JobAlbumNames1793715748738 } from './1793715748738-JobAlbumNames.js';
 import { CandidateFileName1793718000000 } from './1793718000000-CandidateFileName.js';
 import { RunAppliedAt1793720000000 } from './1793720000000-RunAppliedAt.js';
 import { AssetIndex1793722000000 } from './1793722000000-AssetIndex.js';
+import { JobGroups1793724000000 } from './1793724000000-JobGroups.js';
 
 /**
  * Every migration, in order. Generate new ones with
@@ -16,4 +17,5 @@ export const MIGRATIONS = [
   CandidateFileName1793718000000,
   RunAppliedAt1793720000000,
   AssetIndex1793722000000,
+  JobGroups1793724000000,
 ];

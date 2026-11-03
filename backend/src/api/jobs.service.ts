@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, type Repository } from 'typeorm';
+import { isGroupJobType } from '../core/job-type.js';
 import { JobTypeRegistry } from '../core/job-type.registry.js';
 import { JobScheduler } from '../scheduler/job-scheduler.js';
 import {
@@ -65,14 +66,25 @@ export class JobsService {
       ]);
     }
     const params = this.parseParams(dto.typeId, dto.params);
-    assertDistinctAlbums(dto.targetAlbumName, dto.exclusionAlbumName ?? null);
+    const groupJob = isGroupJobType(this.registry.get(dto.typeId));
+    if (!groupJob && !dto.targetAlbumName)
+      throw new ValidationFailedException([
+        { path: ['targetAlbumName'], message: 'is required' },
+      ]);
+    // Group jobs create one album per group; they have no target album.
+    const targetAlbumName = groupJob ? '' : dto.targetAlbumName!;
+    assertDistinctAlbums(
+      targetAlbumName,
+      dto.exclusionAlbumName ?? null,
+      dto.name,
+    );
     assertScheduleUsable(dto.enabled, dto.schedule ?? null);
     const { identifiers } = await this.jobs.insert({
       name: dto.name,
       typeId: dto.typeId,
       typeVersion: 0,
       params,
-      targetAlbumName: dto.targetAlbumName,
+      targetAlbumName,
       exclusionAlbumName: dto.exclusionAlbumName ?? null,
       syncMode: dto.syncMode,
       schedule: dto.schedule ?? null,
@@ -85,11 +97,23 @@ export class JobsService {
 
   async update(id: string, dto: UpdateJobDto): Promise<JobView> {
     const job = await this.getEntity(id);
+    const groupJob =
+      this.registry.has(job.typeId) &&
+      isGroupJobType(this.registry.get(job.typeId));
+    if (groupJob && dto.targetAlbumName)
+      throw new ValidationFailedException([
+        {
+          path: ['targetAlbumName'],
+          message:
+            'group jobs create one album per group; they have no target album',
+        },
+      ]);
     assertDistinctAlbums(
       dto.targetAlbumName ?? job.targetAlbumName,
       dto.exclusionAlbumName !== undefined
         ? dto.exclusionAlbumName
         : job.exclusionAlbumName,
+      dto.name ?? job.name,
     );
     const patch: Partial<JobEntity> = {};
     if (dto.name !== undefined) patch.name = dto.name;
@@ -138,7 +162,8 @@ export class JobsService {
         name: j.name,
         typeId: j.typeId,
         params: j.params,
-        targetAlbumName: j.targetAlbumName,
+        // Group jobs have no target album; omitted so the export re-imports.
+        ...(j.targetAlbumName ? { targetAlbumName: j.targetAlbumName } : {}),
         exclusionAlbumName: j.exclusionAlbumName,
         syncMode: j.syncMode,
         schedule: j.schedule,
@@ -219,9 +244,7 @@ export class JobsService {
 
   private view(job: JobEntity, lastRun: JobRunEntity | null): JobView {
     return Object.assign(Object.create(null) as object, job, {
-      effectiveExclusionAlbumName:
-        job.exclusionAlbumName ??
-        defaultExclusionAlbumName(job.targetAlbumName),
+      effectiveExclusionAlbumName: exclusionAlbumName(job),
       lastRun,
       nextRunAt: this.scheduler.nextRun(job.id),
     }) as JobView;
@@ -229,10 +252,16 @@ export class JobsService {
 }
 
 /** The exclusion album must not be the target album (it would exclude everything). */
-function assertDistinctAlbums(target: string, exclusion: string | null): void {
+function assertDistinctAlbums(
+  target: string,
+  exclusion: string | null,
+  jobName: string,
+): void {
+  if (!target) return; // group jobs have no target album
   const effective = exclusionAlbumName({
     targetAlbumName: target,
     exclusionAlbumName: exclusion,
+    name: jobName,
   });
   if (effective.trim().toLowerCase() === target.trim().toLowerCase()) {
     throw new ValidationFailedException([
@@ -261,7 +290,8 @@ export interface ExportedJob {
   name: string;
   typeId: string;
   params: Record<string, unknown>;
-  targetAlbumName: string;
+  /** Omitted for group jobs. */
+  targetAlbumName?: string;
   exclusionAlbumName: string | null;
   syncMode: JobEntity['syncMode'];
   schedule: string | null;

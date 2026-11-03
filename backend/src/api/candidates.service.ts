@@ -34,6 +34,7 @@ interface Filter {
   minScore?: number;
   maxScore?: number;
   selected?: boolean;
+  group?: string;
 }
 
 function where(runId: string, f: Filter): { sql: string; args: unknown[] } {
@@ -50,6 +51,10 @@ function where(runId: string, f: Filter): { sql: string; args: unknown[] } {
   if (f.selected !== undefined) {
     parts.push('selected = ?');
     args.push(f.selected ? 1 : 0);
+  }
+  if (f.group !== undefined) {
+    parts.push('group_key = ?');
+    args.push(f.group);
   }
   return { sql: parts.join(' AND '), args };
 }

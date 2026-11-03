@@ -15,6 +15,7 @@ import { PersistenceModule } from './persistence/persistence.module.js';
 import { SyncModule } from './sync/sync.module.js';
 import { FeaturesModule } from './features/asset-feature-cache.js';
 import { AssetIndexModule } from './asset-index/asset-index.service.js';
+import { GroupsModule } from './groups/group-store.js';
 import { SettingsModule } from './settings/settings.service.js';
 
 @Module({})
@@ -33,6 +34,7 @@ export class AppModule {
         SyncModule,
         FeaturesModule,
         AssetIndexModule,
+        GroupsModule,
         SettingsModule,
         AuthModule,
         HealthModule,

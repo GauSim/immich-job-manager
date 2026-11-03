@@ -316,6 +316,8 @@ Month names use the `locale` param (default `en`). An empty placeholder is dropp
 
 T2: the fine-tuning fields (`homeWindowDays` … `ongoingGraceDays`, `adoptMinShare`) are nested under `advanced`; see `backend/src/jobs/trips/trip.params.ts`.
 
+T3: there is no `exclusionAlbum` param. Group jobs use the job's exclusion album field, default `<job name> – excluded`.
+
 ```typescript
 type TripParams = {
   awayRule: 'other-country' | 'distance' | 'either';  // 'other-country'
@@ -338,7 +340,6 @@ type TripParams = {
   locale: string;                   // 'en'
   adoptExisting: 'auto' | 'off';    // 'auto'
   adoptMinShare: number;            // 0.8  share of the album's assets inside the trip range
-  exclusionAlbum: string;           // 'Trips – excluded' (assets never put in any trip)
   minimumYear?: number;             // optional: ignore trips before this year
 };
 ```
@@ -424,7 +425,7 @@ Group jobs reuse the run endpoints. Added:
 | POST | `/runs/:id/apply` | Applies selected trips (existing endpoint, group-aware). |
 | GET | `/jobs/:id/groups` | Current trips of a job with status and album link. |
 | PATCH | `/jobs/:id/groups/:groupId` | `ignored` / `locked` / back to `active`. |
-| GET | `/jobs/:id/home` | Inferred home per month (for the "Home" panel). |
+| GET | `/jobs/:id/insights` | Type-specific insights; trip albums: inferred home per month (for the "Home" panel). T3: generic name instead of `/home`. |
 
 ---
 

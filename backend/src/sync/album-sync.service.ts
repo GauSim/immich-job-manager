@@ -9,11 +9,17 @@ export function defaultExclusionAlbumName(target: string): string {
   return `${target} – excluded`;
 }
 
+/**
+ * Effective exclusion album. Group jobs (e.g. trip albums) have no target
+ * album; their default is `<job name> – excluded`.
+ */
 export function exclusionAlbumName(
-  job: Pick<JobEntity, 'targetAlbumName' | 'exclusionAlbumName'>,
+  job: Pick<JobEntity, 'targetAlbumName' | 'exclusionAlbumName'> &
+    Partial<Pick<JobEntity, 'name'>>,
 ): string {
   return (
-    job.exclusionAlbumName ?? defaultExclusionAlbumName(job.targetAlbumName)
+    job.exclusionAlbumName ??
+    defaultExclusionAlbumName(job.targetAlbumName || job.name || 'Album job')
   );
 }
 

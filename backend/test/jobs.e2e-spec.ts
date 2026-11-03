@@ -128,7 +128,6 @@ describe('Jobs & runs API (e2e)', () => {
       expect(res.body.errors).toEqual(
         expect.arrayContaining([
           { path: ['name'], message: 'is required' },
-          { path: ['targetAlbumName'], message: expect.any(String) },
           {
             path: ['schedule'],
             message: 'must be a valid cron expression, e.g. "0 3 * * *"',
@@ -139,6 +138,14 @@ describe('Jobs & runs API (e2e)', () => {
           },
         ]),
       );
+      // The target album depends on the job type (group jobs have none), so it is checked after the DTO.
+      const noTarget = await http
+        .post('/api/jobs')
+        .send({ name: 'x', typeId: 'noop-test' })
+        .expect(400);
+      expect(noTarget.body.errors).toEqual([
+        { path: ['targetAlbumName'], message: 'is required' },
+      ]);
     });
 
     it('validates the type and its params', async () => {

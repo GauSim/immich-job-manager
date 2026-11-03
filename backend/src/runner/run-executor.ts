@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { Repository } from 'typeorm';
-import type { JobContext } from '../core/job-type.js';
+import { isGroupJobType, type JobContext } from '../core/job-type.js';
 import { JobTypeRegistry } from '../core/job-type.registry.js';
 import { RunEventsService } from '../events/run-events.service.js';
 import { AlbumSyncService } from '../sync/album-sync.service.js';
@@ -15,6 +15,7 @@ import {
 } from '../persistence/entities/index.js';
 import { RunCancelledError, RunInterruptedError } from './run-errors.js';
 import { DbRunLogger } from './run-logger.js';
+import { GroupRunExecutor } from './group-run.js';
 import { RunStore, type RunTotals } from './run-store.js';
 
 /**
@@ -38,6 +39,7 @@ export class RunExecutor {
     private readonly events: RunEventsService,
     private readonly albumSync: AlbumSyncService,
     private readonly features: AssetFeatureCache,
+    private readonly groupRuns: GroupRunExecutor,
   ) {}
 
   async execute(runId: string, signal: AbortSignal): Promise<void> {
@@ -86,104 +88,119 @@ export class RunExecutor {
           : 'Full scan of the library',
       );
 
-      // Albums: dry runs only read (exclusions), real runs find or create them.
-      const albums = await this.albumSync.resolve(job, {
-        create: !run.dryRun,
-        signal,
-      });
-      log.info(
-        `Album "${albums.targetName}": ${albums.target ? `${albums.members.size} assets${albums.target.created ? ' (created)' : ''}` : 'does not exist yet'}; ` +
-          `exclusion album "${albums.exclusionName}": ${albums.exclusion ? `${albums.excluded.size} assets${albums.exclusion.created ? ' (created)' : ''}` : 'does not exist yet'}`,
-      );
-      const mirror = !run.dryRun && job.syncMode === 'mirror';
-      const matches = new Set<string>();
-      const sync = { excluded: 0, alreadyInAlbum: 0, failed: 0 };
-
-      const ctx: JobContext<unknown> = {
-        runId,
-        jobId: job.id,
-        params: parsed.data,
-        immich: this.immich,
-        features: this.features,
-        since: run.since ?? undefined,
-        resumeFrom,
-        dryRun: run.dryRun,
-        log,
-        signal,
-      };
-
-      for await (const batch of type.select(ctx)) {
-        signal.throwIfAborted();
-        // Excluded assets never count as matches (SDD §4.3).
-        const candidates = batch.candidates.filter(
-          (c) => !albums.excluded.has(c.assetId),
+      if (isGroupJobType(type)) {
+        totals = await this.groupRuns.execute({
+          run,
+          job,
+          type,
+          params: parsed.data,
+          startedAt,
+          log,
+          signal,
+        });
+        log.info(
+          `Finished: ${totals.scanned} indexed, ${totals.matched} assets in groups in ${seconds(startedAt)} s`,
         );
-        sync.excluded += batch.candidates.length - candidates.length;
-        let owned: { jobId: string; assetIds: string[] } | undefined;
-        if (!run.dryRun) {
-          // Write this page's new matches before its cursor is saved, so a
-          // resume can never skip unwritten matches.
-          const ids = candidates.map((c) => c.assetId);
-          if (mirror) for (const id of ids) matches.add(id);
-          const result = await this.albumSync.add(albums, ids, signal);
-          sync.alreadyInAlbum += result.alreadyInAlbum;
-          sync.failed += result.failed.length;
-          for (const f of result.failed.slice(0, 3)) {
-            log.warn(`Immich refused to add ${f.id} (${f.error})`);
-          }
-          owned = { jobId: job.id, assetIds: result.added };
-        }
-        totals = this.store.persistPage(
+      } else {
+        // Albums: dry runs only read (exclusions), real runs find or create them.
+        const albums = await this.albumSync.resolve(job, {
+          create: !run.dryRun,
+          signal,
+        });
+        log.info(
+          `Album "${albums.targetName}": ${albums.target ? `${albums.members.size} assets${albums.target.created ? ' (created)' : ''}` : 'does not exist yet'}; ` +
+            `exclusion album "${albums.exclusionName}": ${albums.exclusion ? `${albums.excluded.size} assets${albums.exclusion.created ? ' (created)' : ''}` : 'does not exist yet'}`,
+        );
+        const mirror = !run.dryRun && job.syncMode === 'mirror';
+        const matches = new Set<string>();
+        const sync = { excluded: 0, alreadyInAlbum: 0, failed: 0 };
+
+        const ctx: JobContext<unknown> = {
           runId,
-          { ...batch, candidates },
-          { storeCandidates: run.dryRun, owned },
-        );
-        this.events.progress(runId, totals);
-      }
+          jobId: job.id,
+          params: parsed.data,
+          immich: this.immich,
+          features: this.features,
+          since: run.since ?? undefined,
+          resumeFrom,
+          dryRun: run.dryRun,
+          log,
+          signal,
+        };
 
-      if (mirror) {
-        if (resumeFrom) {
-          log.warn(
-            'Mirror mode: removals skipped because this run was resumed (matches of earlier pages are unknown). Run a full rescan to remove.',
+        for await (const batch of type.select(ctx)) {
+          signal.throwIfAborted();
+          // Excluded assets never count as matches (SDD §4.3).
+          const candidates = batch.candidates.filter(
+            (c) => !albums.excluded.has(c.assetId),
           );
-        } else if (run.since) {
-          log.info('Mirror mode: removals only happen on full rescans');
-        } else {
-          const owned = this.store.ownedAssetIds(job.id);
-          const removal = await this.albumSync.removeOwnedNonMatches(
-            albums,
-            owned,
-            matches,
-            signal,
-          );
-          totals = this.store.recordRemovals(
-            runId,
-            job.id,
-            removal.removed,
-            removal.forgotten,
-          );
-          sync.failed += removal.failed.length;
-          if (removal.removed.length || removal.forgotten.length) {
-            log.info(
-              `Mirror mode: removed ${removal.removed.length} owned asset(s) that no longer match` +
-                (removal.forgotten.length
-                  ? `; ${removal.forgotten.length} were already removed by hand`
-                  : ''),
-            );
+          sync.excluded += batch.candidates.length - candidates.length;
+          let owned: { jobId: string; assetIds: string[] } | undefined;
+          if (!run.dryRun) {
+            // Write this page's new matches before its cursor is saved, so a
+            // resume can never skip unwritten matches.
+            const ids = candidates.map((c) => c.assetId);
+            if (mirror) for (const id of ids) matches.add(id);
+            const result = await this.albumSync.add(albums, ids, signal);
+            sync.alreadyInAlbum += result.alreadyInAlbum;
+            sync.failed += result.failed.length;
+            for (const f of result.failed.slice(0, 3)) {
+              log.warn(`Immich refused to add ${f.id} (${f.error})`);
+            }
+            owned = { jobId: job.id, assetIds: result.added };
           }
+          totals = this.store.persistPage(
+            runId,
+            { ...batch, candidates },
+            { storeCandidates: run.dryRun, owned },
+          );
           this.events.progress(runId, totals);
         }
-      }
 
-      log.info(
-        `Finished: ${totals?.scanned ?? 0} scanned, ${totals?.matched ?? 0} matched` +
-          (run.dryRun
-            ? ''
-            : `, ${totals?.added ?? 0} added, ${totals?.removed ?? 0} removed, ${sync.alreadyInAlbum} already in album`) +
-          (sync.excluded ? `, ${sync.excluded} excluded` : '') +
-          (sync.failed ? `, ${sync.failed} refused by Immich` : '') +
-          ` in ${seconds(startedAt)} s`,
-      );
+        if (mirror) {
+          if (resumeFrom) {
+            log.warn(
+              'Mirror mode: removals skipped because this run was resumed (matches of earlier pages are unknown). Run a full rescan to remove.',
+            );
+          } else if (run.since) {
+            log.info('Mirror mode: removals only happen on full rescans');
+          } else {
+            const owned = this.store.ownedAssetIds(job.id);
+            const removal = await this.albumSync.removeOwnedNonMatches(
+              albums,
+              owned,
+              matches,
+              signal,
+            );
+            totals = this.store.recordRemovals(
+              runId,
+              job.id,
+              removal.removed,
+              removal.forgotten,
+            );
+            sync.failed += removal.failed.length;
+            if (removal.removed.length || removal.forgotten.length) {
+              log.info(
+                `Mirror mode: removed ${removal.removed.length} owned asset(s) that no longer match` +
+                  (removal.forgotten.length
+                    ? `; ${removal.forgotten.length} were already removed by hand`
+                    : ''),
+              );
+            }
+            this.events.progress(runId, totals);
+          }
+        }
+
+        log.info(
+          `Finished: ${totals?.scanned ?? 0} scanned, ${totals?.matched ?? 0} matched` +
+            (run.dryRun
+              ? ''
+              : `, ${totals?.added ?? 0} added, ${totals?.removed ?? 0} removed, ${sync.alreadyInAlbum} already in album`) +
+            (sync.excluded ? `, ${sync.excluded} excluded` : '') +
+            (sync.failed ? `, ${sync.failed} refused by Immich` : '') +
+            ` in ${seconds(startedAt)} s`,
+        );
+      }
       // A completed full real run makes this job-type version the baseline;
       // a later version bump forces the next run to be full again (phase 7).
       if (!run.dryRun && !run.since && job.typeVersion !== type.version) {
