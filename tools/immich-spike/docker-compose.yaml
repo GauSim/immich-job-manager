@@ -16,3 +16,13 @@ services:
       - host.docker.internal:host-gateway
     command: sh -c "npm ci --no-audit --no-fund && npm run spike"
     restart: "no"
+    # Alternative: join Immich's Docker network and use IMMICH_URL=http://immich_server:2283/api
+    # (no published port needed). Uncomment both blocks and set the network name from the
+    # Docker app's network list.
+    # networks:
+    #   - immich
+
+# networks:
+#   immich:
+#     external: true
+#     name: immich_default

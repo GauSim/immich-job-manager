@@ -44,7 +44,7 @@ P6 and P7 are independent and can be done in either order.
 
 **Goal:** an empty but buildable monorepo, and certainty about the Immich v3 API shapes.
 
-**Status:** done (2026-11-03) – one follow-up open: spike rerun against the real instance
+**Status:** done (2026-11-03)
 
 Tasks:
 
@@ -75,8 +75,8 @@ Tasks:
   - [x] `curl -r 0-65535` on `GET /assets/{id}/original` for an iPhone screenshot → check for `206 Partial Content`.
   - [x] Note required API key permissions.
   - Note: run against a throwaway Immich **v3.3.5** seeded with synthetic fixtures (`tools/immich-spike`), not yet against the real instance. Key findings: `page` is deprecated in v3.3 → use `filter` + `cursor`; `total` is per page; Range is honoured (206); `UserComment` comes back as raw bytes. See `docs/immich-api-notes.md` §9 for the impact on later phases.
-  - [ ] Rerun `npm run spike` against the real Immich instance (incl. `SPIKE_ASSET_ID` of a real iPhone screenshot) and diff with the notes.
-    - Note: can be run on the NAS via `tools/immich-spike/docker-compose.yml` (see its README).
+  - [x] Rerun `npm run spike` against the real Immich instance (incl. `SPIKE_ASSET_ID` of a real iPhone screenshot) and diff with the notes.
+    - Note: run on the NAS via `tools/immich-spike/docker-compose.yaml` (2026-11-03). All findings confirmed; omitted visibility also returns hidden assets, smart search verified with ML, Range + `UserComment` verified on a real iPhone screenshot. See `docs/immich-api-notes.md`.
 
 - [x] **Deliverables:** repo, green CI, spike notes in `docs/immich-api-notes.md`.
   - Note: CI green on GitHub Actions (run #1: backend, frontend, spike typecheck, Docker build + health smoke test).
