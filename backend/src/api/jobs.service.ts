@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, type Repository } from 'typeorm';
 import { JobTypeRegistry } from '../core/job-type.registry.js';
+import { JobScheduler } from '../scheduler/job-scheduler.js';
 import {
   defaultExclusionAlbumName,
   exclusionAlbumName,
@@ -13,8 +14,12 @@ import {
 
 export { defaultExclusionAlbumName };
 import { JobEntity, JobRunEntity } from '../persistence/entities/index.js';
-import type { CreateJobDto, UpdateJobDto } from './dto.js';
-import { ValidationFailedException, zodErrors } from './validation.js';
+import { CreateJobDto, type UpdateJobDto } from './dto.js';
+import {
+  ValidationFailedException,
+  zodErrors,
+  type FieldError,
+} from './validation.js';
 
 export const ACTIVE_STATUSES = ['queued', 'running'] as const;
 
@@ -22,6 +27,8 @@ export interface JobView extends JobEntity {
   /** Effective exclusion album name (default applied). */
   effectiveExclusionAlbumName: string;
   lastRun: JobRunEntity | null;
+  /** Next scheduled run (enabled jobs with a schedule), else null. */
+  nextRunAt: Date | null;
 }
 
 @Injectable()
@@ -31,6 +38,7 @@ export class JobsService {
     @InjectRepository(JobRunEntity)
     private readonly runs: Repository<JobRunEntity>,
     private readonly registry: JobTypeRegistry,
+    private readonly scheduler: JobScheduler,
   ) {}
 
   async list(): Promise<JobView[]> {
@@ -58,6 +66,7 @@ export class JobsService {
     }
     const params = this.parseParams(dto.typeId, dto.params);
     assertDistinctAlbums(dto.targetAlbumName, dto.exclusionAlbumName ?? null);
+    assertScheduleUsable(dto.enabled, dto.schedule ?? null);
     const { identifiers } = await this.jobs.insert({
       name: dto.name,
       typeId: dto.typeId,
@@ -69,7 +78,9 @@ export class JobsService {
       schedule: dto.schedule ?? null,
       enabled: dto.enabled,
     });
-    return this.get(identifiers[0].id as string);
+    const id = identifiers[0].id as string;
+    this.scheduler.sync(await this.getEntity(id));
+    return this.get(id);
   }
 
   async update(id: string, dto: UpdateJobDto): Promise<JobView> {
@@ -101,8 +112,75 @@ export class JobsService {
     if (dto.syncMode !== undefined) patch.syncMode = dto.syncMode;
     if (dto.schedule !== undefined) patch.schedule = dto.schedule ?? null;
     if (dto.enabled !== undefined) patch.enabled = dto.enabled;
-    if (Object.keys(patch).length > 0) await this.jobs.update(id, patch);
+    assertScheduleUsable(
+      dto.enabled ?? job.enabled,
+      dto.schedule !== undefined ? dto.schedule : job.schedule,
+    );
+    if (Object.keys(patch).length > 0) {
+      await this.jobs.update(id, patch);
+      this.scheduler.sync(await this.getEntity(id));
+    }
     return this.get(id);
+  }
+
+  async exportAll(): Promise<{
+    app: 'immich-album-jobs';
+    version: 1;
+    exportedAt: string;
+    jobs: ExportedJob[];
+  }> {
+    const jobs = await this.jobs.find({ order: { name: 'ASC' } });
+    return {
+      app: 'immich-album-jobs',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      jobs: jobs.map((j) => ({
+        name: j.name,
+        typeId: j.typeId,
+        params: j.params,
+        targetAlbumName: j.targetAlbumName,
+        exclusionAlbumName: j.exclusionAlbumName,
+        syncMode: j.syncMode,
+        schedule: j.schedule,
+        enabled: j.enabled,
+      })),
+    };
+  }
+
+  /** Creates the given jobs (validated like `POST /jobs`); existing names are skipped. */
+  async importAll(items: unknown[]): Promise<ImportResult> {
+    const result: ImportResult = { created: [], skipped: [], failed: [] };
+    const existing = new Set(
+      (await this.jobs.find()).map((j) => j.name.toLowerCase()),
+    );
+    for (const [index, item] of items.entries()) {
+      const name = (item as { name?: unknown } | null)?.name;
+      const parsed = CreateJobDto.safeParse(item);
+      if (!parsed.success) {
+        result.failed.push({
+          index,
+          name: typeof name === 'string' ? name : undefined,
+          errors: zodErrors(parsed.error),
+        });
+        continue;
+      }
+      if (existing.has(parsed.data.name.toLowerCase())) {
+        result.skipped.push(parsed.data.name);
+        continue;
+      }
+      try {
+        await this.create(parsed.data);
+        existing.add(parsed.data.name.toLowerCase());
+        result.created.push(parsed.data.name);
+      } catch (e) {
+        const errors =
+          e instanceof ValidationFailedException
+            ? (e.getResponse() as { errors: FieldError[] }).errors
+            : [{ path: [], message: (e as Error).message }];
+        result.failed.push({ index, name: parsed.data.name, errors });
+      }
+    }
+    return result;
   }
 
   /** Deletes the job and its run history. Never touches Immich albums. */
@@ -113,6 +191,7 @@ export class JobsService {
         'The job has a queued or running run; cancel it first',
       );
     await this.jobs.delete(id);
+    this.scheduler.remove(id);
   }
 
   isBusy(jobId: string): Promise<boolean> {
@@ -144,6 +223,7 @@ export class JobsService {
         job.exclusionAlbumName ??
         defaultExclusionAlbumName(job.targetAlbumName),
       lastRun,
+      nextRunAt: this.scheduler.nextRun(job.id),
     }) as JobView;
   }
 }
@@ -162,4 +242,35 @@ function assertDistinctAlbums(target: string, exclusion: string | null): void {
       },
     ]);
   }
+}
+
+/** An enabled schedule needs a cron expression. */
+function assertScheduleUsable(enabled: boolean, schedule: string | null): void {
+  if (enabled && !schedule) {
+    throw new ValidationFailedException([
+      {
+        path: ['schedule'],
+        message: 'is required when the schedule is enabled',
+      },
+    ]);
+  }
+}
+
+/** Portable job definition (export/import): no ids, albums by name. */
+export interface ExportedJob {
+  name: string;
+  typeId: string;
+  params: Record<string, unknown>;
+  targetAlbumName: string;
+  exclusionAlbumName: string | null;
+  syncMode: JobEntity['syncMode'];
+  schedule: string | null;
+  enabled: boolean;
+}
+
+export interface ImportResult {
+  created: string[];
+  /** Skipped because a job with the same name exists. */
+  skipped: string[];
+  failed: { index: number; name?: string; errors: FieldError[] }[];
 }

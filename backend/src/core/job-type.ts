@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import type { AssetFeatureCache } from '../features/asset-feature-cache.js';
 import type { ImmichClient } from '../immich/immich.client.js';
 
 /**
@@ -51,6 +52,8 @@ export interface JobContext<P> {
   readonly jobId: string;
   readonly params: P;
   readonly immich: ImmichClient;
+  /** Per-asset cache of expensive signals (e.g. the iOS tag read from files). */
+  readonly features: AssetFeatureCache;
   /** Set for incremental runs: only assets updated after this time. */
   readonly since?: Date;
   /** Cursor of an interrupted run to continue from. */

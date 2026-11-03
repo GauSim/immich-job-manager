@@ -5,6 +5,7 @@ import { RunExecutor } from './run-executor.js';
 import { RunQueue } from './run-queue.js';
 import { RunLifecycle } from './run-lifecycle.js';
 import { RunStore } from './run-store.js';
+import { RunLauncher } from './run-launcher.js';
 
 @Module({
   providers: [
@@ -17,7 +18,8 @@ import { RunStore } from './run-store.js';
         new RunQueue(config.maxConcurrentRuns, executor),
     },
     RunLifecycle,
+    RunLauncher,
   ],
-  exports: [RunQueue, RunStore],
+  exports: [RunQueue, RunStore, RunLauncher],
 })
 export class RunnerModule {}

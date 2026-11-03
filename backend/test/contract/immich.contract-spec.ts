@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { INestApplication } from '@nestjs/common';
@@ -23,6 +23,7 @@ import { RunQueue } from '../../src/runner/run-queue.js';
  */
 const url = process.env.IMMICH_CONTRACT_URL;
 const key = process.env.IMMICH_CONTRACT_KEY;
+const uploadKey = process.env.IMMICH_CONTRACT_UPLOAD_KEY;
 const suffix = `${Date.now()}`;
 
 describe.skipIf(!url || !key)('Immich v3 contract', () => {
@@ -132,6 +133,7 @@ describe.skipIf(!url || !key)('Immich v3 contract', () => {
         IMMICH_URL: url,
         IMMICH_API_KEY: key,
         APP_PASSWORD: 'p',
+        AUTH_MODE: 'forward-auth', // auth is covered by auth.e2e-spec
         DATA_DIR: dataDir,
         NODE_ENV: 'production',
         LOG_LEVEL: 'fatal',
@@ -197,7 +199,13 @@ describe.skipIf(!url || !key)('Immich v3 contract', () => {
         'Screenshot_20260101-120000.png',
       ]);
 
+      // Rerun: incremental (nothing changed since) and a full rescan both add nothing.
       expect(await run(job.id)).toMatchObject({
+        status: 'succeeded',
+        fullRescan: false,
+        added: 0,
+      });
+      expect(await run(job.id, { fullRescan: true })).toMatchObject({
         status: 'succeeded',
         matched: 4,
         added: 0,
@@ -209,15 +217,22 @@ describe.skipIf(!url || !key)('Immich v3 contract', () => {
       const moved = byName.get('IMG_0002.PNG')!.id;
       await immich.removeFromAlbum(target.id, [moved]);
       await immich.addToAlbum(exclusion.id, [moved]);
-      expect(await run(job.id)).toMatchObject({ matched: 3, added: 0 });
+      expect(await run(job.id, { fullRescan: true })).toMatchObject({
+        matched: 3,
+        added: 0,
+      });
       expect(await members(album)).not.toContain('IMG_0002.PNG');
 
-      // Mirror + stricter threshold: IMG_0001 (0.6) no longer matches and is removed.
+      // Mirror + stricter threshold, file tag off: IMG_0001 (0.6 from metadata)
+      // no longer matches and is removed.
       await http
         .patch(`/api/jobs/${job.id}`)
-        .send({ syncMode: 'mirror', params: { threshold: 0.9 } })
+        .send({
+          syncMode: 'mirror',
+          params: { threshold: 0.9, readIosTag: false },
+        })
         .expect(200);
-      expect(await run(job.id)).toMatchObject({
+      expect(await run(job.id, { fullRescan: true })).toMatchObject({
         status: 'succeeded',
         matched: 2,
         removed: 1,
@@ -226,6 +241,42 @@ describe.skipIf(!url || !key)('Immich v3 contract', () => {
         'Bildschirmfoto 2026-01-01 um 12.00.00.png',
         'Screenshot_20260101-120000.png',
       ]);
+    });
+
+    it('reads the iOS tag from a real original and caches it', async () => {
+      // IMG_0001.PNG carries EXIF UserComment "Screenshot" but no Immich description;
+      // IMG_0002.PNG is the same kind of PNG without the tag.
+      const { body: job } = await http
+        .post('/api/jobs')
+        .send({
+          name: 'Contract tag',
+          typeId: 'screenshot-detector',
+          targetAlbumName: `Tag ${suffix}`,
+          // Both iPhone-sized PNGs score 0.6 from metadata → borderline → files are read.
+          params: { threshold: 0.7 },
+        })
+        .expect(201);
+      const first = await run(job.id);
+      const list = (
+        await http.get(`/api/runs/${first.id}/candidates?limit=10`).expect(200)
+      ).body.items as {
+        originalFileName: string;
+        score: number;
+        reasons: string[];
+      }[];
+      const byFile = new Map(list.map((c) => [c.originalFileName, c]));
+      expect(byFile.get('IMG_0001.PNG')).toMatchObject({
+        score: 1,
+        reasons: expect.arrayContaining(['ios-tag']),
+      });
+      expect(byFile.has('IMG_0002.PNG')).toBe(false); // read, no tag → stays below 0.7
+      expect(first.filesRead).toBe(2);
+
+      const second = await run(job.id);
+      expect(second).toMatchObject({
+        filesRead: 0,
+        cacheHits: first.filesRead,
+      });
     });
 
     it('dry run + apply adds only the selected candidates', async () => {
@@ -264,5 +315,67 @@ describe.skipIf(!url || !key)('Immich v3 contract', () => {
       expect(await members(album)).toHaveLength(3);
       expect(await members(album)).not.toContain(lowest.originalFileName);
     });
+
+    // Last: it adds an asset to the library, which would change the counts above.
+    it.skipIf(!uploadKey)(
+      'an incremental run picks up a newly uploaded screenshot',
+      async () => {
+        const album = `Incremental ${suffix}`;
+        const { body: job } = await http
+          .post('/api/jobs')
+          .send({
+            name: 'Contract incremental',
+            typeId: 'screenshot-detector',
+            targetAlbumName: album,
+            syncMode: 'additive',
+          })
+          .expect(201);
+        const first = await run(job.id);
+        expect(first).toMatchObject({ status: 'succeeded', fullRescan: true });
+
+        // Upload a new iOS-style screenshot (EXIF tag only) with the upload-only key.
+        const name = `Screenshot_${suffix}.png`;
+        const form = new FormData();
+        form.append(
+          'assetData',
+          new Blob([
+            readFileSync(
+              join(import.meta.dirname, '../fixtures/files/ios-screenshot.png'),
+            ),
+          ]),
+          name,
+        );
+        form.append('filename', name);
+        form.append('fileCreatedAt', new Date().toISOString());
+        form.append('fileModifiedAt', new Date().toISOString());
+        const res = await fetch(`${url}/assets`, {
+          method: 'POST',
+          headers: { 'x-api-key': uploadKey! },
+          body: form,
+        });
+        expect(res.status).toBe(201);
+        const { id: uploaded } = (await res.json()) as { id: string };
+        // Wait until Immich has extracted its metadata.
+        await expect
+          .poll(
+            async () =>
+              (
+                await immich.searchMetadataPage({ withExif: true, size: 1000 })
+              ).items.find((a) => a.id === uploaded)?.width,
+            { timeout: 60_000, interval: 1000 },
+          )
+          .toBeTruthy();
+
+        const second = await run(job.id);
+        expect(second).toMatchObject({
+          status: 'succeeded',
+          fullRescan: false,
+          added: 1,
+        });
+        expect(second.scanned as number).toBeLessThan(first.scanned as number);
+        const target = (await immich.findAlbum(album))!;
+        expect(await immich.listAlbumMemberIds(target.id)).toContain(uploaded);
+      },
+    );
   });
 });

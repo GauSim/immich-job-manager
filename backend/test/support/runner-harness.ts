@@ -27,6 +27,7 @@ import { PersistenceModule } from '../../src/persistence/persistence.module.js';
 import { SqliteService } from '../../src/persistence/sqlite.service.js';
 import { RunnerModule } from '../../src/runner/runner.module.js';
 import { SyncModule } from '../../src/sync/sync.module.js';
+import { FeaturesModule } from '../../src/features/asset-feature-cache.js';
 import { MemoryImmich } from './memory-immich.js';
 
 /**
@@ -147,6 +148,7 @@ export async function createRunnerHarness(
       JobTypesModule,
       TestDoublesModule,
       SyncModule,
+      FeaturesModule,
       RunnerModule,
     ],
     providers: options.providers ?? [],

@@ -1,17 +1,19 @@
 import {
-  HttpContextToken,
   HttpErrorResponse,
+  type HttpEvent,
   type HttpHandlerFn,
   type HttpInterceptorFn,
   type HttpRequest,
 } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { Router } from '@angular/router';
+import { AuthStore } from './auth.store';
+import { SILENT_ERRORS } from './http-context';
+
+export { SILENT_ERRORS };
 import { catchError, switchMap, throwError, type Observable } from 'rxjs';
 import type { FieldError } from './models';
-
-/** Set on a request to suppress the snackbar (e.g. background health polling). */
-export const SILENT_ERRORS = new HttpContextToken<boolean>(() => false);
 
 /** True for `400 { message: 'Validation failed', errors: [...] }` — forms show these per field. */
 export function isValidationError(
@@ -42,20 +44,38 @@ const isTransient = (err: HttpErrorResponse) => err.status === 0 || err.status >
  */
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const snackBar = inject(MatSnackBar);
-  return send(req, next, snackBar);
+  const auth = inject(AuthStore);
+  const router = inject(Router);
+  return send(req, next, snackBar).pipe(
+    catchError((err: unknown) => {
+      // Session missing/expired: go to the login page instead of showing an error.
+      if (
+        err instanceof HttpErrorResponse &&
+        err.status === 401 &&
+        !req.url.startsWith('/api/auth/')
+      ) {
+        auth.expired();
+        if (!router.url.startsWith('/login')) {
+          void router.navigate(['/login'], { queryParams: { returnUrl: router.url } });
+        }
+      }
+      return throwError(() => err);
+    }),
+  );
 };
 
 function send(
   req: HttpRequest<unknown>,
   next: HttpHandlerFn,
   snackBar: MatSnackBar,
-): Observable<never> | ReturnType<HttpHandlerFn> {
+): Observable<HttpEvent<unknown>> {
   return next(req).pipe(
     catchError((err: unknown) => {
       if (
         !(err instanceof HttpErrorResponse) ||
         req.context.get(SILENT_ERRORS) ||
-        isValidationError(err)
+        isValidationError(err) ||
+        err.status === 401
       ) {
         return throwError(() => err);
       }

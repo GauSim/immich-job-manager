@@ -11,7 +11,7 @@ npm run test:e2e      # e2e tests (supertest)
 npm run build
 ```
 
-Configuration: see the root README. `.env` in this directory is loaded automatically in development.
+Configuration: see the root README. For local development without logging in, set `AUTH_MODE=forward-auth` in `backend/.env`. `.env` in this directory is loaded automatically in development.
 
 ## Contract tests (real Immich)
 
@@ -23,7 +23,13 @@ cd ../../backend
 IMMICH_CONTRACT_URL=http://localhost:2283/api IMMICH_CONTRACT_KEY=$(cat ../tools/immich-spike/out/api-key) npm run test:contract
 ```
 
+`IMMICH_CONTRACT_UPLOAD_KEY=$(cat ../tools/immich-spike/out/upload-key)` (an upload-only key created by the seed) enables the incremental upload test. Run against a *freshly* seeded instance: the tests assume the seeded library.
+
 CI starts Immich from `.github/immich/docker-compose.yml` (job `immich-contract`).
+
+## Scale test
+
+`npm run test:scale` (also in CI): 100k fake assets with sample originals; prints runtime, files read, cache hits and heap per run, and asserts that the second run reads no files and that no memory is retained.
 
 ## Database migrations
 

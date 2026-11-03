@@ -31,6 +31,7 @@ describe('Jobs & runs API (e2e)', () => {
       IMMICH_URL: immich.url,
       IMMICH_API_KEY: 'k',
       APP_PASSWORD: 'p',
+      AUTH_MODE: 'forward-auth', // auth is covered by auth.e2e-spec
       DATA_DIR: dataDir,
       NODE_ENV: 'production',
       LOG_LEVEL: 'fatal',
@@ -203,7 +204,7 @@ describe('Jobs & runs API (e2e)', () => {
       expect(started.body).toMatchObject({
         jobId: id,
         dryRun: true,
-        fullRescan: false,
+        fullRescan: true,
         trigger: 'manual',
       });
       await idle();
@@ -237,13 +238,14 @@ describe('Jobs & runs API (e2e)', () => {
         .expect(200);
       expect(logs.body.map((l: { message: string }) => l.message)).toEqual([
         expect.stringMatching(/^Starting dry run of "Noop" \(noop-test v1\)/),
+        'Full scan of the library',
         'Album "Library": does not exist yet; exclusion album "Library – excluded": does not exist yet',
         expect.stringMatching(/^Finished: 2500 scanned, 0 matched/),
       ]);
       const after = await http
         .get(`/api/runs/${started.body.id}/logs?after=${logs.body[0].id}`)
         .expect(200);
-      expect(after.body).toHaveLength(2);
+      expect(after.body).toHaveLength(3);
     });
 
     it('allows one active run per job and guards dry-run jobs', async () => {

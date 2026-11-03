@@ -22,6 +22,7 @@ describe('App (e2e)', () => {
       IMMICH_URL: immich.url,
       IMMICH_API_KEY: 'test-key',
       APP_PASSWORD: 'pw',
+      AUTH_MODE: 'forward-auth', // auth is covered by auth.e2e-spec
       DATA_DIR: dataDir,
       NODE_ENV: 'production',
       LOG_LEVEL: 'fatal',
@@ -56,6 +57,7 @@ describe('App (e2e)', () => {
     const res = await request(a.getHttpServer()).get('/api/health').expect(200);
     expect(res.body).toEqual({
       status: 'ok',
+      version: expect.any(String),
       database: { status: 'up' },
       immich: { status: 'up', version: 'v3.3.5' },
     });

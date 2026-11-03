@@ -12,7 +12,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Router, RouterLink } from '@angular/router';
-import { forkJoin, of } from 'rxjs';
+import { catchError, forkJoin, of } from 'rxjs';
 import { Api } from '../../core/api';
 import { isValidationError } from '../../core/error.interceptor';
 import { applyServerErrors } from '../../core/form-errors';
@@ -26,7 +26,7 @@ import {
   type SyncMode,
 } from '../../core/models';
 import { confirm } from '../../shared/confirm-dialog';
-import { relativeTime } from '../../shared/format';
+import { parseServerDate, relativeTime } from '../../shared/format';
 import { ParamsForm } from '../../shared/params-form';
 import { StatusChip } from '../../shared/status-chip';
 
@@ -71,6 +71,7 @@ export class JobEditor {
   /** Formly mutates this object; replaced when the type changes. */
   protected readonly paramsModel = signal<Record<string, unknown>>({});
   protected readonly relativeTime = relativeTime;
+  protected readonly localTime = (iso: string) => parseServerDate(iso).toLocaleString();
 
   protected readonly form = new FormGroup({
     name: new FormControl('', {
@@ -99,8 +100,7 @@ export class JobEditor {
   constructor() {
     this.form.controls.typeId.valueChanges.subscribe((typeId) => {
       this.typeId.set(typeId);
-      if (this.isNew())
-        this.resetParams(this.types().find((t) => t.id === typeId)?.defaultParams ?? {});
+      if (this.isNew()) this.resetParams(this.newJobParams(typeId));
     });
     this.form.controls.targetAlbumName.valueChanges.subscribe(() =>
       this.exclusionPlaceholder.set(this.defaultExclusion()),
@@ -123,9 +123,11 @@ export class JobEditor {
       types: this.api.jobTypes(),
       job: id ? this.api.job(id) : of(null),
       runs: id ? this.api.runs(id, 10) : of({ items: [], total: 0 }),
+      settings: id ? of(null) : this.api.settings().pipe(catchError(() => of(null))),
     }).subscribe({
-      next: ({ types, job, runs }) => {
+      next: ({ types, job, runs, settings }) => {
         this.types.set(types);
+        this.defaultThreshold = settings?.settings['defaults.threshold'];
         this.job.set(job);
         this.runs.set(runs.items);
         if (job) {
@@ -151,6 +153,16 @@ export class JobEditor {
       },
       error: () => this.loading.set(false),
     });
+  }
+
+  private defaultThreshold: number | undefined;
+
+  /** Type defaults, with the default threshold from Settings when the type has one. */
+  private newJobParams(typeId: string): Record<string, unknown> {
+    const defaults = this.types().find((t) => t.id === typeId)?.defaultParams ?? {};
+    return 'threshold' in defaults && this.defaultThreshold !== undefined
+      ? { ...defaults, threshold: this.defaultThreshold }
+      : defaults;
   }
 
   private resetParams(params: Record<string, unknown>): void {
@@ -230,11 +242,11 @@ export class JobEditor {
     });
   }
 
-  start(dryRun: boolean): void {
+  start(dryRun: boolean, fullRescan = false): void {
     const job = this.job();
     if (!job) return;
     this.starting.set(true);
-    this.api.startRun(job.id, { dryRun }).subscribe({
+    this.api.startRun(job.id, { dryRun, fullRescan }).subscribe({
       next: (run) => void this.router.navigate(['/runs', run.id]),
       error: () => this.starting.set(false),
     });

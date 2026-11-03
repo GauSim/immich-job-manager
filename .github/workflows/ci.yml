@@ -67,6 +67,23 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
 
+  scale:
+    name: Scale test (100k assets)
+    runs-on: ubuntu-latest
+    needs: [backend]
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run test:scale -- --silent=false
+
   immich-contract:
     name: Contract tests (real Immich v3)
     runs-on: ubuntu-latest
@@ -105,6 +122,7 @@ jobs:
         run: |
           IMMICH_CONTRACT_URL=http://localhost:2283/api \
           IMMICH_CONTRACT_KEY="$(cat ../tools/immich-spike/out/api-key)" \
+          IMMICH_CONTRACT_UPLOAD_KEY="$(cat ../tools/immich-spike/out/upload-key)" \
           npm run test:contract
       - name: Immich logs
         if: failure()
@@ -165,9 +183,10 @@ jobs:
           out=$(docker run --rm immich-album-jobs:ci 2>&1); code=$?
           echo "$out"
           [ "$code" -eq 1 ] && echo "$out" | grep -q "Invalid configuration"
-      - name: Smoke test /api/health (Immich unreachable → degraded)
+      - name: Smoke test – hardened container (read-only root, no capabilities)
         run: |
           docker run -d --name app -p 3000:3000 \
+            --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true \
             -e IMMICH_URL=http://127.0.0.1:9/api -e IMMICH_API_KEY=ci -e APP_PASSWORD=ci \
             immich-album-jobs:ci
           for i in $(seq 1 30); do
@@ -176,5 +195,10 @@ jobs:
           done
           docker logs app
           echo "$body"
-          echo "$body" | grep -q '"status":"degraded"'
-          echo "$body" | grep -q '"database":{"status":"up"}'
+          echo "$body" | grep -q '"status":"degraded"'   # Immich unreachable, app up
+          # Sign in and write to the database (/data is the only writable path besides /tmp).
+          curl -fsS -c jar -H 'content-type: application/json' -d '{"password":"ci"}' http://localhost:3000/api/auth/login
+          curl -fsS -b jar -H 'content-type: application/json' \
+            -d '{"name":"Smoke","typeId":"noop-test","targetAlbumName":"Smoke"}' http://localhost:3000/api/jobs
+          curl -fsS http://localhost:3000/ | grep -q '<app-root>'   # UI served
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/jobs)" = 401

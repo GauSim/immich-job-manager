@@ -51,6 +51,7 @@ describe('Album sync (e2e)', () => {
       IMMICH_URL: immich.url,
       IMMICH_API_KEY: 'k',
       APP_PASSWORD: 'p',
+      AUTH_MODE: 'forward-auth', // auth is covered by auth.e2e-spec
       DATA_DIR: dataDir,
       NODE_ENV: 'production',
       LOG_LEVEL: 'fatal',
@@ -83,10 +84,17 @@ describe('Album sync (e2e)', () => {
         })
         .expect(201)
     ).body as { id: string };
-  const runJob = async (jobId: string, dryRun?: boolean) => {
+  const runJob = async (
+    jobId: string,
+    dryRun?: boolean,
+    fullRescan?: boolean,
+  ) => {
     const { body } = await http
       .post(`/api/jobs/${jobId}/runs`)
-      .send(dryRun === undefined ? {} : { dryRun })
+      .send({
+        ...(dryRun === undefined ? {} : { dryRun }),
+        ...(fullRescan ? { fullRescan } : {}),
+      })
       .expect(202);
     await idle();
     return (await http.get(`/api/runs/${body.id}`).expect(200)).body as Record<
@@ -119,9 +127,20 @@ describe('Album sync (e2e)', () => {
     expect(owned(id).n).toBe(97);
     expect(lib.writeCalls()).toBe(1); // one page with matches → one PUT (≤ 500 ids)
 
+    // The next run is incremental: nothing was updated since → nothing scanned or written.
     const second = await runJob(id);
     expect(second).toMatchObject({
       status: 'succeeded',
+      fullRescan: false,
+      scanned: 0,
+      added: 0,
+    });
+    expect(second.since).toBeTruthy();
+    // A full rescan without library changes also writes nothing.
+    const full = await runJob(id, undefined, true);
+    expect(full).toMatchObject({
+      status: 'succeeded',
+      fullRescan: true,
       matched: 97,
       added: 0,
       removed: 0,
@@ -137,7 +156,7 @@ describe('Album sync (e2e)', () => {
     lib.album('Screenshots')!.members.delete(moved);
     lib.album('Screenshots – excluded')!.members.add(moved);
 
-    const next = await runJob(id);
+    const next = await runJob(id, undefined, true);
     expect(next).toMatchObject({ matched: 96, added: 0 });
     expect(lib.members('Screenshots')).not.toContain(moved);
     expect(lib.writeCalls()).toBe(1);
@@ -162,7 +181,7 @@ describe('Album sync (e2e)', () => {
           }
         : a,
     );
-    const next = await runJob(id);
+    const next = await runJob(id, undefined, true); // mirror removals need a full scan
     expect(next).toMatchObject({
       status: 'succeeded',
       matched: 96,

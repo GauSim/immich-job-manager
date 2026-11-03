@@ -30,6 +30,7 @@ describe('UI static files (e2e)', () => {
       IMMICH_URL: immich.url,
       IMMICH_API_KEY: 'k',
       APP_PASSWORD: 'p',
+      AUTH_MODE: 'forward-auth', // auth is covered by auth.e2e-spec
       DATA_DIR: join(dir, 'data'),
       PUBLIC_DIR: join(dir, 'public'),
       NODE_ENV: 'production',

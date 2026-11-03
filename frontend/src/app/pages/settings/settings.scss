@@ -1,0 +1,21 @@
+.card-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
+}
+dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 24px;
+  margin: 16px 0 0;
+}
+dt {
+  color: var(--mat-sys-on-surface-variant);
+}
+dd {
+  margin: 0;
+  word-break: break-all;
+}
+.fields {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+}

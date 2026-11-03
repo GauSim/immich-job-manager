@@ -84,3 +84,18 @@ export const UpdateCandidatesDto = z
     error: 'use either assetIds or filter, not both',
   });
 export type UpdateCandidatesDto = z.infer<typeof UpdateCandidatesDto>;
+
+/** `POST /jobs/import` — the body of `GET /jobs/export`. */
+export const ImportJobsDto = z.object({
+  app: z.literal('immich-album-jobs').optional(),
+  version: z.literal(1).optional(),
+  jobs: z.array(z.unknown()).min(1).max(1000),
+});
+export type ImportJobsDto = z.infer<typeof ImportJobsDto>;
+
+export const UpdateSettingsDto = z.strictObject({
+  'retention.dryRunCandidates': z.number().int().min(1).max(100).optional(),
+  'retention.logDays': z.number().int().min(1).max(3650).optional(),
+  'defaults.threshold': z.number().min(0).max(1).optional(),
+});
+export type UpdateSettingsDto = z.infer<typeof UpdateSettingsDto>;

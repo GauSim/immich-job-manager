@@ -17,6 +17,14 @@
     >
       Run now
     </button>
+    <button
+      matButton
+      [disabled]="busy() || starting() || form.dirty || job()?.syncMode === 'dry-run'"
+      matTooltip="Scan the whole library instead of only assets changed since the last run"
+      (click)="start(false, true)"
+    >
+      Full rescan
+    </button>
   }
 </div>
 
@@ -92,7 +100,7 @@
             <mat-form-field>
               <mat-label>Schedule (cron)</mat-label>
               <input matInput formControlName="schedule" placeholder="0 3 * * *" />
-              <mat-hint>Server time zone; scheduling arrives in phase 7</mat-hint>
+              <mat-hint>In the server's time zone (TZ)</mat-hint>
               @if (serverError('schedule'); as e) {
                 <mat-error>{{ e }}</mat-error>
               }
@@ -100,6 +108,11 @@
           </div>
 
           <mat-slide-toggle formControlName="enabled">Schedule enabled</mat-slide-toggle>
+          @if (job()?.nextRunAt; as next) {
+            <span class="muted next-run" data-testid="next-run"
+              >Next run {{ relativeTime(next) }} ({{ localTime(next) }})</span
+            >
+          }
         </mat-card-content>
       </mat-card>
 

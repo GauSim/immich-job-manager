@@ -1,18 +1,31 @@
 <mat-toolbar class="toolbar">
   <a class="brand" routerLink="/jobs">{{ title }}</a>
-  <nav class="nav">
-    <a matButton routerLink="/jobs" routerLinkActive="active">Jobs</a>
-    <a matButton routerLink="/settings" routerLinkActive="active">Settings</a>
-  </nav>
-  <span class="spacer"></span>
-  <span
-    class="status"
-    [class]="'status ' + immich().state"
-    [matTooltip]="immich().tip"
-    data-testid="immich-status"
-  >
-    <span class="dot"></span>{{ immich().label }}
-  </span>
+  @if (signedIn()) {
+    <nav class="nav">
+      <a matButton routerLink="/jobs" routerLinkActive="active">Jobs</a>
+      <a matButton routerLink="/settings" routerLinkActive="active">Settings</a>
+    </nav>
+    <span class="spacer"></span>
+    <span
+      class="status"
+      [class]="'status ' + immich().state"
+      [matTooltip]="immich().tip"
+      data-testid="immich-status"
+    >
+      <span class="dot"></span>{{ immich().label }}
+    </span>
+    @if (canLogout()) {
+      <button
+        matIconButton
+        (click)="logout()"
+        aria-label="Sign out"
+        matTooltip="Sign out"
+        data-testid="logout"
+      >
+        <mat-icon>logout</mat-icon>
+      </button>
+    }
+  }
 </mat-toolbar>
 
 <main class="content">

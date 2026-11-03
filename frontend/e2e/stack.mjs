@@ -27,6 +27,7 @@ const library = [];
 for (let c = 0; c < COPIES; c++) {
   for (const a of sample) {
     library.push({
+      checksum: `${c}-${a.id}`,
       ...a,
       id: uuid(`${c}-${a.id}`),
       originalFileName: c ? a.originalFileName.replace(/(\.\w+)$/, `-${c}$1`) : a.originalFileName,
@@ -160,6 +161,18 @@ const immich = createServer((req, res) => {
           nextCursor: next,
         },
       });
+    }
+    // Originals (screenshot job reads the first 64 KiB of borderline files): a PNG without the iOS tag.
+    const original = /^\/api\/assets\/([0-9a-f-]{36})\/original$/.exec(url.pathname);
+    if (req.method === 'GET' && original) {
+      if (!knownIds.has(original[1])) return json(res, 404, { message: 'Not found' });
+      const png = thumbnailPng(parseInt(original[1].slice(0, 6), 16));
+      const end = Math.min(65535, png.length - 1);
+      res.writeHead(206, {
+        'content-type': 'image/png',
+        'content-range': `bytes 0-${end}/${png.length}`,
+      });
+      return res.end(png.subarray(0, end + 1));
     }
     const thumb = /^\/api\/assets\/([0-9a-f-]{36})\/thumbnail$/.exec(url.pathname);
     if (req.method === 'GET' && thumb) {

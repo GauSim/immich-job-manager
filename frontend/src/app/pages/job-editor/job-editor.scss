@@ -37,6 +37,9 @@
 .spacer {
   flex: 1;
 }
+.next-run {
+  font: var(--mat-sys-body-small);
+}
 .delete {
   color: var(--mat-sys-error);
 }

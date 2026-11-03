@@ -1,5 +1,6 @@
 import {
   Body,
+  Header,
   Controller,
   Delete,
   Get,
@@ -15,8 +16,18 @@ import {
   type JobTypeInfo,
 } from '../core/job-type.registry.js';
 import type { JobRunEntity } from '../persistence/entities/index.js';
-import { CreateJobDto, PageQuery, StartRunDto, UpdateJobDto } from './dto.js';
-import { JobsService, type JobView } from './jobs.service.js';
+import {
+  CreateJobDto,
+  ImportJobsDto,
+  PageQuery,
+  StartRunDto,
+  UpdateJobDto,
+} from './dto.js';
+import {
+  JobsService,
+  type ImportResult,
+  type JobView,
+} from './jobs.service.js';
 import { RunsService } from './runs.service.js';
 import { ZodPipe } from './validation.js';
 
@@ -40,6 +51,24 @@ export class JobsController {
   @Get()
   list(): Promise<JobView[]> {
     return this.jobs.list();
+  }
+
+  /** All job definitions as JSON (backup / move to another instance). Declared before `:id`. */
+  @Get('export')
+  @Header(
+    'Content-Disposition',
+    'attachment; filename="immich-album-jobs.json"',
+  )
+  exportJobs(): ReturnType<JobsService['exportAll']> {
+    return this.jobs.exportAll();
+  }
+
+  @Post('import')
+  @HttpCode(200)
+  importJobs(
+    @Body(new ZodPipe(ImportJobsDto)) dto: ImportJobsDto,
+  ): Promise<ImportResult> {
+    return this.jobs.importAll(dto.jobs);
   }
 
   @Post()

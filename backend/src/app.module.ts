@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { DynamicModule, Logger, Module } from '@nestjs/common';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ApiModule } from './api/api.module.js';
+import { AuthModule } from './auth/auth.module.js';
 import { ConfigModule } from './config/config.module.js';
 import type { AppConfig } from './config/config.schema.js';
 import { EventsModule } from './events/events.module.js';
@@ -12,6 +13,8 @@ import { JobTypesModule } from './jobs/job-types.module.js';
 import { LoggingModule } from './logging/logging.module.js';
 import { PersistenceModule } from './persistence/persistence.module.js';
 import { SyncModule } from './sync/sync.module.js';
+import { FeaturesModule } from './features/asset-feature-cache.js';
+import { SettingsModule } from './settings/settings.service.js';
 
 @Module({})
 export class AppModule {
@@ -27,6 +30,9 @@ export class AppModule {
         EventsModule,
         JobTypesModule,
         SyncModule,
+        FeaturesModule,
+        SettingsModule,
+        AuthModule,
         HealthModule,
         ApiModule,
         ...staticFiles(config.publicDir),

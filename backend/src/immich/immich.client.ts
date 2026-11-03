@@ -381,25 +381,21 @@ export class ImmichClient {
     return this.fileLimit(async () => {
       const ctx: RequestContext = {};
       const operation = 'readOriginalHead';
-      const res = await this.rawGet(
-        operation,
-        `/assets/${encodeURIComponent(assetId)}/original`,
-        ctx,
-        options,
-        {
-          Range: `bytes=0-${bytes - 1}`,
-        },
-      );
-      const data = await readAtMost(res, bytes);
-      const range = res.headers.get('content-range');
-      const total =
-        range?.match(/\/(\d+)$/)?.[1] ??
-        (res.status === 200 ? res.headers.get('content-length') : null);
-      return {
-        data,
-        partial: res.status === 206,
-        totalSize: total ? Number(total) : undefined,
-      };
+      const link = linkSignal(options.signal);
+      try {
+        const res = await this.rawGet(
+          operation,
+          `/assets/${encodeURIComponent(assetId)}/original`,
+          ctx,
+          { ...options, signal: link.signal },
+          {
+            Range: `bytes=0-${bytes - 1}`,
+          },
+        );
+        return await readHead(res, bytes);
+      } finally {
+        link.release();
+      }
     });
   }
 
@@ -476,13 +472,16 @@ export class ImmichClient {
   ): Promise<T> {
     return this.apiLimit(async () => {
       const ctx: RequestContext = {};
-      const signal = withTimeout(options);
+      const link = linkSignal(options.signal);
+      const signal = withTimeout(link.signal, options.timeoutMs);
       try {
         return await fn(
           this.sdkOptions(operation, ctx, signal, options.retry ?? true),
         );
       } catch (e) {
         throw this.toImmichError(operation, e, ctx, signal);
+      } finally {
+        link.release();
       }
     });
   }
@@ -516,7 +515,7 @@ export class ImmichClient {
     options: CallOptions,
     headers: Record<string, string> = {},
   ): Promise<Response> {
-    const signal = withTimeout(options);
+    const signal = withTimeout(options.signal, options.timeoutMs);
     let res: Response;
     try {
       res = await this.fetchWithRetry(
@@ -639,10 +638,50 @@ export function buildMetadataSearch(
   };
 }
 
-function withTimeout(options: CallOptions): AbortSignal | undefined {
-  if (!options.timeoutMs) return options.signal;
-  const timeout = AbortSignal.timeout(options.timeoutMs);
-  return options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+function withTimeout(
+  signal: AbortSignal | undefined,
+  timeoutMs: number | undefined,
+): AbortSignal | undefined {
+  if (!timeoutMs) return signal;
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
+
+/**
+ * A per-request signal that follows `parent`. Passing a long-lived signal (a
+ * run's) straight to fetch makes undici add an abort listener per request that
+ * stays until the run ends — tens of thousands of reads then pile up retained
+ * memory. Call `release()` when the request (incl. its body) is done.
+ */
+export function linkSignal(parent: AbortSignal | undefined): {
+  signal: AbortSignal | undefined;
+  release(): void;
+} {
+  if (!parent) return { signal: undefined, release: () => {} };
+  const controller = new AbortController();
+  if (parent.aborted) {
+    controller.abort(parent.reason);
+    return { signal: controller.signal, release: () => {} };
+  }
+  const onAbort = () => controller.abort(parent.reason);
+  parent.addEventListener('abort', onAbort, { once: true });
+  return {
+    signal: controller.signal,
+    release: () => parent.removeEventListener('abort', onAbort),
+  };
+}
+
+async function readHead(res: Response, bytes: number): Promise<OriginalHead> {
+  const data = await readAtMost(res, bytes);
+  const range = res.headers.get('content-range');
+  const total =
+    range?.match(/\/(\d+)$/)?.[1] ??
+    (res.status === 200 ? res.headers.get('content-length') : null);
+  return {
+    data,
+    partial: res.status === 206,
+    totalSize: total ? Number(total) : undefined,
+  };
 }
 
 function parseRetryAfter(value: string | null): number | undefined {

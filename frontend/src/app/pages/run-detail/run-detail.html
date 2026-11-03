@@ -63,8 +63,13 @@
       @if (startedAt()) {
         Started {{ startedAt() }}
       }
-      @if (r.fullRescan) {
-        · full rescan
+      @if (!r.dryRun) {
+        <span data-testid="scan-mode"
+          >· {{ r.since ? 'incremental since ' + sinceText() : 'full scan' }}</span
+        >
+      }
+      @if (r.trigger === 'schedule') {
+        · scheduled
       }
       @if (appliedAt()) {
         <span data-testid="applied-at">· applied {{ appliedAt() }}</span>

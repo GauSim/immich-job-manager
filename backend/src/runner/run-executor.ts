@@ -5,6 +5,7 @@ import type { JobContext } from '../core/job-type.js';
 import { JobTypeRegistry } from '../core/job-type.registry.js';
 import { RunEventsService } from '../events/run-events.service.js';
 import { AlbumSyncService } from '../sync/album-sync.service.js';
+import { AssetFeatureCache } from '../features/asset-feature-cache.js';
 import { ImmichClient } from '../immich/immich.client.js';
 import {
   JobEntity,
@@ -36,6 +37,7 @@ export class RunExecutor {
     private readonly immich: ImmichClient,
     private readonly events: RunEventsService,
     private readonly albumSync: AlbumSyncService,
+    private readonly features: AssetFeatureCache,
   ) {}
 
   async execute(runId: string, signal: AbortSignal): Promise<void> {
@@ -78,6 +80,11 @@ export class RunExecutor {
           ? `Resuming ${mode} of "${job.name}" (${type.id} v${type.version})`
           : `Starting ${mode} of "${job.name}" (${type.id} v${type.version})`,
       );
+      log.info(
+        run.since
+          ? `Incremental: only assets updated since ${run.since.toISOString()}`
+          : 'Full scan of the library',
+      );
 
       // Albums: dry runs only read (exclusions), real runs find or create them.
       const albums = await this.albumSync.resolve(job, {
@@ -97,6 +104,7 @@ export class RunExecutor {
         jobId: job.id,
         params: parsed.data,
         immich: this.immich,
+        features: this.features,
         since: run.since ?? undefined,
         resumeFrom,
         dryRun: run.dryRun,
@@ -176,6 +184,11 @@ export class RunExecutor {
           (sync.failed ? `, ${sync.failed} refused by Immich` : '') +
           ` in ${seconds(startedAt)} s`,
       );
+      // A completed full real run makes this job-type version the baseline;
+      // a later version bump forces the next run to be full again (phase 7).
+      if (!run.dryRun && !run.since && job.typeVersion !== type.version) {
+        await this.jobs.update(job.id, { typeVersion: type.version });
+      }
     } catch (e) {
       const reason: unknown = signal.aborted ? signal.reason : undefined;
       if (reason instanceof RunCancelledError) {
