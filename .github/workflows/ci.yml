@@ -81,12 +81,22 @@ jobs:
           tags: immich-album-jobs:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Smoke test /api/health
+      - name: Smoke test – invalid config stops boot
         run: |
-          docker run -d --name app -p 3000:3000 immich-album-jobs:ci
+          set +e
+          out=$(docker run --rm immich-album-jobs:ci 2>&1); code=$?
+          echo "$out"
+          [ "$code" -eq 1 ] && echo "$out" | grep -q "Invalid configuration"
+      - name: Smoke test /api/health (Immich unreachable → degraded)
+        run: |
+          docker run -d --name app -p 3000:3000 \
+            -e IMMICH_URL=http://127.0.0.1:9/api -e IMMICH_API_KEY=ci -e APP_PASSWORD=ci \
+            immich-album-jobs:ci
           for i in $(seq 1 30); do
-            curl -fsS http://localhost:3000/api/health && exit 0
+            body=$(curl -fsS http://localhost:3000/api/health) && break
             sleep 1
           done
           docker logs app
-          exit 1
+          echo "$body"
+          echo "$body" | grep -q '"status":"degraded"'
+          echo "$body" | grep -q '"database":{"status":"up"}'

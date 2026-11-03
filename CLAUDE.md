@@ -43,11 +43,14 @@ Run in the package directory:
 | test | `npm test`, `npm run test:e2e` | `npm test` |
 | build | `npm run build` | `npm run build` |
 
+Migrations: see `backend/README.md` (generate after every entity change; register in `migrations/index.ts`).
+
 Before committing, run lint, format check, tests and build for every package you touched. CI (`.github/workflows/ci.yml`) runs the same plus a Docker build and `/api/health` smoke test.
 
 ## Conventions
 
-- Talk to Immich only through the `ImmichClient` adapter (phase 1+), never raw `fetch` in job code.
+- Talk to Immich only through `ImmichClient` (`backend/src/immich/`), never raw `fetch` or the SDK elsewhere.
+- Config comes from the injected `APP_CONFIG` (`AppConfig`), never `process.env` outside `config/` and `main.ts`.
 - Immich v3.x only; `@immich/sdk` pinned to the server's version.
 - All HTTP routes under `/api`.
 - No secrets in the repo, DB or browser; secrets come from `*_FILE` env vars / Docker secrets.
