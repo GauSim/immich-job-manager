@@ -8,6 +8,7 @@ Immich Album Jobs: a companion app for Immich v3 that runs rerunnable batch jobs
 
 - Design: `docs/design/immich-album-jobs-SDD.md`
 - Plan: `docs/design/immich-album-jobs-implementation-plan.md`
+- Trip albums (next feature, phases T0–T6): `docs/design/trip-albums-SDD.md`, `docs/design/trip-albums-implementation-plan.md` (same tracking rules as below)
 - Immich API findings: `docs/immich-api-notes.md` (read before touching the Immich client; it overrides the SDD where they differ, e.g. cursor pagination)
 
 ## Implementation plan tracking (important)
