@@ -212,10 +212,14 @@ describe.skipIf(!url || !key)('Immich v3 contract', () => {
       expect(await run(job.id)).toMatchObject({ matched: 3, added: 0 });
       expect(await members(album)).not.toContain('IMG_0002.PNG');
 
-      // Mirror + stricter threshold: IMG_0001 (0.6) no longer matches and is removed.
+      // Mirror + stricter threshold, file tag off: IMG_0001 (0.6 from metadata)
+      // no longer matches and is removed.
       await http
         .patch(`/api/jobs/${job.id}`)
-        .send({ syncMode: 'mirror', params: { threshold: 0.9 } })
+        .send({
+          syncMode: 'mirror',
+          params: { threshold: 0.9, readIosTag: false },
+        })
         .expect(200);
       expect(await run(job.id)).toMatchObject({
         status: 'succeeded',
@@ -226,6 +230,42 @@ describe.skipIf(!url || !key)('Immich v3 contract', () => {
         'Bildschirmfoto 2026-01-01 um 12.00.00.png',
         'Screenshot_20260101-120000.png',
       ]);
+    });
+
+    it('reads the iOS tag from a real original and caches it', async () => {
+      // IMG_0001.PNG carries EXIF UserComment "Screenshot" but no Immich description;
+      // IMG_0002.PNG is the same kind of PNG without the tag.
+      const { body: job } = await http
+        .post('/api/jobs')
+        .send({
+          name: 'Contract tag',
+          typeId: 'screenshot-detector',
+          targetAlbumName: `Tag ${suffix}`,
+          // Both iPhone-sized PNGs score 0.6 from metadata → borderline → files are read.
+          params: { threshold: 0.7 },
+        })
+        .expect(201);
+      const first = await run(job.id);
+      const list = (
+        await http.get(`/api/runs/${first.id}/candidates?limit=10`).expect(200)
+      ).body.items as {
+        originalFileName: string;
+        score: number;
+        reasons: string[];
+      }[];
+      const byFile = new Map(list.map((c) => [c.originalFileName, c]));
+      expect(byFile.get('IMG_0001.PNG')).toMatchObject({
+        score: 1,
+        reasons: expect.arrayContaining(['ios-tag']),
+      });
+      expect(byFile.has('IMG_0002.PNG')).toBe(false); // read, no tag → stays below 0.7
+      expect(first.filesRead).toBe(2);
+
+      const second = await run(job.id);
+      expect(second).toMatchObject({
+        filesRead: 0,
+        cacheHits: first.filesRead,
+      });
     });
 
     it('dry run + apply adds only the selected candidates', async () => {

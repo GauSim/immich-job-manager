@@ -41,7 +41,7 @@ Run in the package directory:
 | lint | `npm run lint` | `npm run lint` |
 | format | `npm run format` / `format:check` | `npm run format` / `format:check` |
 | typecheck | `npm run typecheck` (incl. tests) | (part of build) |
-| test | `npm test`, `npm run test:e2e`; contract vs real Immich: `npm run test:contract` (see backend README) | `npm test`; UI e2e: `npm run e2e:prepare && npm run e2e` (Playwright) |
+| test | `npm test`, `npm run test:e2e`; contract vs real Immich: `npm run test:contract`; `npm run test:scale` (see backend README) | `npm test`; UI e2e: `npm run e2e:prepare && npm run e2e` (Playwright) |
 | build | `npm run build` | `npm run build` |
 
 Migrations: see `backend/README.md` (generate after every entity change; register in `migrations/index.ts`).
@@ -54,6 +54,7 @@ Before committing, run lint, format check, typecheck, tests and build for every 
 - Database writes: never TypeORM transactions or `save()` (TypeORM's SQLite driver shares one query runner, so async transactions collide). Multi-statement writes go through `SqliteService.transaction()` (synchronous better-sqlite3); otherwise single-statement `insert` / `update` / `delete`.
 - Review generated migrations: for SQLite TypeORM often rebuilds tables (DROP + copy), which cascades deletes through foreign keys. Prefer hand-written `ALTER TABLE … ADD COLUMN`.
 - New job types: a provider with `@AlbumJobType()` implementing `JobType` (`src/core/job-type.ts`), listed in `JOB_TYPES` (`src/jobs/job-types.module.ts`). Use the blocks in `src/core/blocks/`; yield one page at a time.
+- Long-lived `AbortSignal`s (a run's) must not be passed straight to `fetch` for many requests: `ImmichClient` links a per-request signal (`linkSignal`) and releases it. Reuse option objects for libraries that cache per options instance (e.g. `exifr`).
 - Album writes go through `AlbumSyncService` (`src/sync/`); only assets recorded in `job_asset` (owned) may ever be removed. Dry runs must never change Immich.
 - Config comes from the injected `APP_CONFIG` (`AppConfig`), never `process.env` outside `config/` and `main.ts`.
 - Immich v3.x only; `@immich/sdk` pinned to the server's version.

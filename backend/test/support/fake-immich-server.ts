@@ -239,6 +239,9 @@ export class FakeImmichLibrary {
     { albumName: string; members: Set<string> }
   >();
   private albumSeq = 0;
+  /** Original file bytes per asset id; default: a PNG without the iOS tag. */
+  originals = new Map<string, Buffer>();
+  defaultOriginal: Buffer | null = null;
 
   constructor(
     private readonly server: FakeImmichServer,
@@ -267,6 +270,23 @@ export class FakeImmichLibrary {
         status: 201,
         json: { id: this.addAlbum(albumName), albumName, assetCount: 0 },
       };
+    });
+    server.onMatch('GET', /^\/assets\/([^/]+)\/original$/, (req, res) => {
+      const id = req.params![0];
+      const data =
+        this.originals.get(id) ??
+        (this.assets.some((a) => a.id === id) ? this.defaultOriginal : null);
+      if (!data) return { status: 404, json: { message: 'Not found' } };
+      const range = /bytes=0-(\d+)/.exec(String(req.headers.range ?? ''));
+      const end = range
+        ? Math.min(Number(range[1]), data.length - 1)
+        : data.length - 1;
+      res.writeHead(range ? 206 : 200, {
+        'content-type': 'application/octet-stream',
+        'content-length': String(end + 1),
+        ...(range ? { 'content-range': `bytes 0-${end}/${data.length}` } : {}),
+      });
+      res.end(data.subarray(0, end + 1));
     });
     server.onMatch('PUT', /^\/albums\/([^/]+)\/assets$/, (req) =>
       this.write(req, 'add'),

@@ -22,6 +22,8 @@ export const REASONS = {
   png: 'png',
   noCameraExif: 'no-camera-exif',
   screenSize: 'screen-size',
+  iosTag: 'ios-tag',
+  clip: 'clip',
 } as const;
 
 /**

@@ -5,6 +5,7 @@ import type { JobContext } from '../core/job-type.js';
 import { JobTypeRegistry } from '../core/job-type.registry.js';
 import { RunEventsService } from '../events/run-events.service.js';
 import { AlbumSyncService } from '../sync/album-sync.service.js';
+import { AssetFeatureCache } from '../features/asset-feature-cache.js';
 import { ImmichClient } from '../immich/immich.client.js';
 import {
   JobEntity,
@@ -36,6 +37,7 @@ export class RunExecutor {
     private readonly immich: ImmichClient,
     private readonly events: RunEventsService,
     private readonly albumSync: AlbumSyncService,
+    private readonly features: AssetFeatureCache,
   ) {}
 
   async execute(runId: string, signal: AbortSignal): Promise<void> {
@@ -97,6 +99,7 @@ export class RunExecutor {
         jobId: job.id,
         params: parsed.data,
         immich: this.immich,
+        features: this.features,
         since: run.since ?? undefined,
         resumeFrom,
         dryRun: run.dryRun,

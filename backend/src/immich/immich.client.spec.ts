@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import type { LoggerService } from '@nestjs/common';
 import {
   FakeImmichServer,
@@ -6,6 +7,7 @@ import {
 } from '../../test/support/fake-immich-server.js';
 import {
   ALBUM_CHUNK_SIZE,
+  linkSignal,
   AssetTypeEnum,
   AssetVisibility,
   ImmichClient,
@@ -400,5 +402,52 @@ describe('ImmichClient', () => {
         new Uint8Array(await new Response(thumb.body).arrayBuffer()),
       ).toEqual(new Uint8Array([1, 2, 3]));
     });
+  });
+});
+
+describe('linkSignal', () => {
+  it('follows the parent and releases its listener', async () => {
+    const getEventListeners = (s: AbortSignal, e: string) =>
+      EventEmitter.getEventListeners(s, e);
+    const parent = new AbortController();
+    const link = linkSignal(parent.signal);
+    expect(getEventListeners(parent.signal, 'abort')).toHaveLength(1);
+    link.release();
+    expect(getEventListeners(parent.signal, 'abort')).toHaveLength(0);
+
+    const live = linkSignal(parent.signal);
+    parent.abort(new Error('stop'));
+    expect(live.signal?.aborted).toBe(true);
+    expect(live.signal?.reason).toEqual(new Error('stop'));
+    expect(linkSignal(parent.signal).signal?.aborted).toBe(true); // already aborted parent
+    expect(linkSignal(undefined).signal).toBeUndefined();
+  });
+
+  it('leaves no listeners on a long-lived run signal after many requests', async () => {
+    const getEventListeners = (s: AbortSignal, e: string) =>
+      EventEmitter.getEventListeners(s, e);
+    const server = await new FakeImmichServer().start();
+    server.on('GET /server/version', () => ({
+      json: { major: 3, minor: 0, patch: 0 },
+    }));
+    server.on('GET /assets/a1/original', (_req, res) => {
+      res.writeHead(206);
+      res.end(Buffer.alloc(100));
+    });
+    const client = new ImmichClient({
+      baseUrl: server.url,
+      apiKey: 'k',
+      logger: { log() {}, error() {}, warn() {} },
+    });
+    const run = new AbortController();
+    await Promise.all(
+      Array.from({ length: 50 }, (_, i) =>
+        i % 2
+          ? client.readOriginalHead('a1', { signal: run.signal })
+          : client.getVersion({ signal: run.signal }),
+      ),
+    );
+    expect(getEventListeners(run.signal, 'abort')).toHaveLength(0);
+    await server.stop();
   });
 });

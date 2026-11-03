@@ -25,6 +25,10 @@ IMMICH_CONTRACT_URL=http://localhost:2283/api IMMICH_CONTRACT_KEY=$(cat ../tools
 
 CI starts Immich from `.github/immich/docker-compose.yml` (job `immich-contract`).
 
+## Scale test
+
+`npm run test:scale` (also in CI): 100k fake assets with sample originals; prints runtime, files read, cache hits and heap per run, and asserts that the second run reads no files and that no memory is retained.
+
 ## Database migrations
 
 SQLite via TypeORM; migrations run on boot, `synchronize` is off. After changing an entity:

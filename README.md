@@ -2,7 +2,7 @@
 
 Self-hosted companion app for [Immich](https://immich.app) v3: rerunnable, schedulable batch jobs that select assets (first job: screenshots) and keep them in an Immich album. Talks to Immich only through its REST API with a scoped API key.
 
-> Status: **phase 5** – album sync: real runs (additive / mirror) and applied dry runs keep an Immich album filled; the exclusion album keeps false positives out. Scheduling arrives in phase 7.
+> Status: **phase 6** – album sync plus iOS screenshot tag from files (cached per checksum) and optional CLIP. Scheduling arrives in phase 7.
 
 ## Docs
 
@@ -80,6 +80,22 @@ All settings are environment variables, validated at boot; an invalid value stop
 ### Immich API key permissions
 
 Create the key in Immich (Account settings → API keys) with exactly: `server.about`, `asset.read`, `asset.view`, `asset.download`, `album.read`, `album.create`, `albumAsset.create`, `albumAsset.delete`. Details in [the API notes](docs/immich-api-notes.md#2-api-key-permissions).
+
+## How screenshots are detected
+
+Per image (videos are skipped), signals add up to a score (0–1); the default threshold is 0.6:
+
+| Signal | Score |
+| --- | --- |
+| Immich description is `Screenshot` (iOS writes it) | decisive (1.0) |
+| iOS tag `UserComment = "Screenshot"` in the original file | decisive (1.0) |
+| File name (`Screenshot`, `Bildschirmfoto`, …) | +0.6 |
+| PNG | +0.25 |
+| No camera EXIF | +0.15 |
+| Screen-sized (known device resolution, or long/short ≥ 2 without camera EXIF) | +0.2 |
+| CLIP smart search rank (optional, needs Immich ML) | up to +0.25 |
+
+The file tag is only read for borderline images (PNG or no camera EXIF, below the threshold): the first 64 KB of the original, at most `MAX_FILE_READS` at a time, cached per asset and checksum — later runs read only new or changed files.
 
 ## How album sync works
 

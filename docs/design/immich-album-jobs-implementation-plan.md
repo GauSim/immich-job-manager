@@ -271,24 +271,34 @@ Tasks:
 
 **Goal:** high accuracy on iPhone screenshots without heavy I/O.
 
-**Status:** not started
+**Status:** done (2026-11-03) – verified against a real throwaway Immich v3.3.5 and a 100k-asset scale test; pending: first run on the real library
 
 Tasks:
 
-- [ ] `AssetFeatureCache` service over `asset_feature` (lookup by `asset_id` + `checksum`).
-- [ ] `fileTagScorer`: `readOriginalHead` with `Range: bytes=0-65535` (or stream-and-abort, per phase 0 result), parse with `exifr`, detect `UserComment = "Screenshot"`.
-- [ ] Only read when needed: PNG or no camera EXIF, and not already ≥ threshold from metadata.
+- [x] `AssetFeatureCache` service over `asset_feature` (lookup by `asset_id` + `checksum`).
+  - Note: `src/features/`; batched `getMany`/`setMany` (synchronous SQLite transaction); a changed checksum is a miss; assets without a checksum are never cached. Passed to job types as `JobContext.features`.
+- [x] `fileTagScorer`: `readOriginalHead` with `Range: bytes=0-65535` (or stream-and-abort, per phase 0 result), parse with `exifr`, detect `UserComment = "Screenshot"`.
+  - Note: implemented as the block `lookupIosScreenshotTags` (`src/core/blocks/file-tag.ts`): cache first, then a 64 KiB read; decodes UserComment's charset prefix (ASCII, UNICODE/UTF-16, undefined). Parse failures count as "no tag" and are cached (no endless re-reads); Immich errors are not cached and retried next run. A tagged asset is decisive (score 1.0, reason `ios-tag`).
+- [x] Only read when needed: PNG or no camera EXIF, and not already ≥ threshold from metadata.
   - Note (phase 3): tagged iPhone screenshots already score 1.0 from the description tag, so reads are only needed for untagged borderline assets.
-- [ ] File reads limited by `MAX_FILE_READS`; totals `files_read`, `cache_hits`.
-- [ ] `smartSource` + `rankScorer` for optional CLIP queries; rank map built once per run.
-- [ ] Enable `readIosTag` by default.
-- [ ] Scale test with a fake Immich serving 100k assets and sample PNGs: memory, runtime, read count.
+  - Note: on the real-library sample that is ~22 % of images on the first run (mostly camera-less JPEGs from messengers and generated PNGs), 0 afterwards.
+- [x] File reads limited by `MAX_FILE_READS`; totals `files_read`, `cache_hits`.
+  - Note: the run log ends with "iOS tag: N files read, M from cache"; the run page shows both totals.
+- [x] `smartSource` + `rankScorer` for optional CLIP queries; rank map built once per run.
+  - Note: best rank across queries; bonus `0.25 × (1 − rank/topN)`; Immich ML unavailable → warning, run continues without CLIP. Still off by default.
+- [x] Enable `readIosTag` by default.
+  - Note: screenshot job type bumped to **version 2** (forces a full rescan once phase 7 lands).
+- [x] Scale test with a fake Immich serving 100k assets and sample PNGs: memory, runtime, read count.
+  - Note: `npm run test:scale` (CI job `scale`): 99,900 assets (100× the anonymised sample) with sample originals. First run 22,300 files read in ~48 s; second run **0 files read** (22,300 cache hits) in ~1.4 s; a third run after all checksums changed reads everything again. Retained heap after each run ≈ 0. The test found two memory issues, both fixed: `exifr` caches options per options object (a fresh literal per read leaked ~8 KB → one shared options object), and long-lived run signals passed straight to `fetch` accumulate undici abort listeners (→ per-request linked signals, `linkSignal` in `ImmichClient`).
 
-- [ ] **Deliverables:** iOS screenshots named `IMG_xxxx.PNG` reliably land in the album.
+- [x] **Deliverables:** iOS screenshots named `IMG_xxxx.PNG` reliably land in the album.
+  - Note: via the metadata description tag (96/96 in the real sample) and, when that is missing, the file tag (contract test: a PNG with only the EXIF tag is found through a real Immich original).
 
-- [ ] **Tests:** sample PNGs with and without the tag, a re-encoded screenshot (tag missing), cache hit on second run.
+- [x] **Tests:** sample PNGs with and without the tag, a re-encoded screenshot (tag missing), cache hit on second run.
+  - Note: fixtures in `backend/test/fixtures/files/` (ASCII/UTF-16 PNG tags, JPEG tag, no tag, re-encoded JPEG, other comment); unit tests for decoding, cache (checksum invalidation, chunking), read selection, CLIP; e2e (file-tagged asset found, borderline-only Range reads, second run 0 reads, checksum change → 1 re-read); contract test against a real Immich.
 
 - [ ] **Done when:** a second full run reads close to zero files (cache hits); a full run over 30k assets completes within an acceptable window on your hardware.
+  - Note: second run reads 0 files (scale test, e2e, contract). 100k fake assets: ~48 s first run / ~1.4 s second run on the CI-like container; still to time a run on the real 30k library and hardware.
 
 ---
 

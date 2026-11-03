@@ -89,9 +89,9 @@ export const ScreenshotParams = z.object({
     ),
   readIosTag: z
     .boolean()
-    .default(false)
+    .default(true)
     .describe(
-      'Read the iOS UserComment tag from the original file (phase 6, not active yet)',
+      'For borderline PNGs / images without camera EXIF: read the iOS "Screenshot" tag from the first 64 KB of the original (cached per file)',
     ),
   clip: z
     .object({
@@ -112,7 +112,9 @@ export const ScreenshotParams = z.object({
       ],
       topN: 2000,
     })
-    .describe('Smart search (CLIP) signal (phase 6, not active yet)'),
+    .describe(
+      'Smart search (CLIP): assets in the top N of these queries get up to +0.25 (needs Immich machine learning)',
+    ),
   includeArchived: z
     .boolean()
     .default(false)
@@ -129,6 +131,8 @@ export const WEIGHTS = {
   png: 0.25,
   noCameraExif: 0.15,
   screenSize: 0.2,
+  /** Maximum CLIP bonus (top hit); scaled down by rank. */
+  clip: 0.25,
 } as const;
 
 export function parseResolution(r: string): [number, number] {

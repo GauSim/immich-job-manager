@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { ImmichSmartSearchUnavailableError } from '../../immich/immich.errors.js';
+import { MemoryFeatureCache } from '../../../test/support/memory-features.js';
 import type { CandidateBatch, JobContext } from '../../core/job-type.js';
 import type {
   AssetResponseDto,
@@ -19,6 +21,8 @@ type Label = 'screenshot' | 'photo' | 'unknown';
 type Fixture = AssetResponseDto & { label: Label };
 
 /** Anonymised metadata of ~1,000 images of a real library (tools/immich-spike/anonymise-metadata.py). */
+const fixturesDir = join(import.meta.dirname, '../../../test/fixtures/files');
+
 const realLibrary = JSON.parse(
   readFileSync(
     join(
@@ -236,23 +240,60 @@ describe('ScreenshotJob.select', () => {
   ];
   const page2 = [asset('Screenshot_1.png', 'image/png', 1080, 2400)];
 
-  function setup(params: Partial<ScreenshotParams> = {}, resumeFrom?: string) {
+  /** Untagged in Immich metadata, but the file carries the iOS tag. */
+  const fileTagged = asset('IMG_0005.PNG', 'image/png', 1179, 2556);
+  /** Screen-sized PNG without any tag (e.g. a wallpaper). */
+  const untagged = asset('IMG_0006.PNG', 'image/png', 1290, 2796);
+  /** A generated image: PNG, no camera EXIF, not screen-sized (score 0.4). */
+  const generated = asset('IMG_0007.PNG', 'image/png', 1024, 1536);
+
+  const files: Record<string, string> = {
+    'IMG_0005.PNG': 'ios-screenshot.png',
+    'IMG_0006.PNG': 'png-without-tag.png',
+    'IMG_0007.PNG': 'png-without-tag.png',
+  };
+
+  function setup(
+    params: Partial<ScreenshotParams> = {},
+    options: {
+      resumeFrom?: string;
+      pages?: AssetResponseDto[][];
+      features?: MemoryFeatureCache;
+      smart?: () => Promise<string[]>;
+    } = {},
+  ) {
+    const pages = options.pages ?? [page1, page2];
     const queries: Record<string, unknown>[] = [];
     const logs: string[] = [];
+    const reads: string[] = [];
     const immich = {
       searchMetadataPage: async (q: Record<string, unknown>) => {
         queries.push(q);
-        return q.cursor
-          ? { items: page2, nextCursor: null }
-          : { items: page1, nextCursor: 'c2' };
+        const index = q.cursor ? Number(q.cursor) : 0;
+        return {
+          items: pages[index],
+          nextCursor: index + 1 < pages.length ? String(index + 1) : null,
+        };
       },
+      readOriginalHead: async (id: string) => {
+        reads.push(id);
+        return {
+          data: new Uint8Array(
+            readFileSync(join(fixturesDir, files[id])),
+          ).slice(0, 65536),
+          partial: true,
+        };
+      },
+      searchSmart: options.smart ?? (async () => []),
     } as unknown as ImmichClient;
+    const features = options.features ?? new MemoryFeatureCache();
     const ctx: JobContext<ScreenshotParams> = {
       runId: 'r',
       jobId: 'j',
       params: ScreenshotParams.parse(params),
       immich,
-      resumeFrom,
+      features: features.asCache(),
+      resumeFrom: options.resumeFrom,
       dryRun: true,
       signal: new AbortController().signal,
       log: {
@@ -262,7 +303,7 @@ describe('ScreenshotJob.select', () => {
         error: () => {},
       },
     };
-    return { ctx, queries, logs };
+    return { ctx, queries, logs, reads, features };
   }
 
   const collect = async (it: AsyncIterable<CandidateBatch>) => {
@@ -270,38 +311,30 @@ describe('ScreenshotJob.select', () => {
     for await (const b of it) out.push(b);
     return out;
   };
+  const candidates = (batches: CandidateBatch[]) =>
+    batches.flatMap((b) => b.candidates);
 
   it('scans images page by page and yields candidates with file names', async () => {
-    const { ctx, queries, logs } = setup();
-    expect(await collect(job.select(ctx))).toEqual([
+    const { ctx, queries, logs, reads } = setup();
+    const batches = await collect(job.select(ctx));
+    expect(
+      batches.map((b) => ({ scanned: b.scanned, cursor: b.cursor })),
+    ).toEqual([
+      { scanned: 2, cursor: '1' },
+      { scanned: 1, cursor: null },
+    ]);
+    expect(candidates(batches)).toEqual([
       {
-        scanned: 2,
-        cursor: 'c2',
-        candidates: [
-          {
-            assetId: 'IMG_0001.PNG',
-            fileName: 'IMG_0001.PNG',
-            score: 1,
-            reasons: [
-              'description-tag',
-              'png',
-              'no-camera-exif',
-              'screen-size',
-            ],
-          },
-        ],
+        assetId: 'IMG_0001.PNG',
+        fileName: 'IMG_0001.PNG',
+        score: 1,
+        reasons: ['description-tag', 'png', 'no-camera-exif', 'screen-size'],
       },
       {
-        scanned: 1,
-        cursor: null,
-        candidates: [
-          {
-            assetId: 'Screenshot_1.png',
-            fileName: 'Screenshot_1.png',
-            score: 1,
-            reasons: ['filename', 'png', 'no-camera-exif', 'screen-size'],
-          },
-        ],
+        assetId: 'Screenshot_1.png',
+        fileName: 'Screenshot_1.png',
+        score: 1,
+        reasons: ['filename', 'png', 'no-camera-exif', 'screen-size'],
       },
     ]);
     expect(queries[0]).toMatchObject({
@@ -309,51 +342,128 @@ describe('ScreenshotJob.select', () => {
       visibility: ['timeline'],
       withExif: true,
     });
-    expect(logs.at(-1)).toBe(
+    expect(reads).toEqual([]); // nothing borderline: no file reads
+    expect(logs).toContain(
       'Matches by signal: png 2, no-camera-exif 2, screen-size 2, description-tag 1, filename 1',
     );
   });
 
   it('includes archived assets on request and resumes from a cursor', async () => {
-    const { ctx, queries } = setup({ includeArchived: true }, 'c2');
+    const { ctx, queries } = setup(
+      { includeArchived: true },
+      { resumeFrom: '1' },
+    );
     expect(await collect(job.select(ctx))).toHaveLength(1);
     expect(queries[0]).toMatchObject({
-      cursor: 'c2',
+      cursor: '1',
       visibility: ['timeline', 'archive'],
     });
   });
 
   it('respects the threshold', async () => {
     const { ctx } = setup({ threshold: 1 });
-    const ids = (await collect(job.select(ctx))).flatMap((b) =>
-      b.candidates.map((c) => c.assetId),
-    );
-    expect(ids).toEqual(['IMG_0001.PNG', 'Screenshot_1.png']);
-    const strict = setup({
-      threshold: 1,
-      descriptionTags: [],
-      filenamePatterns: [],
-    });
     expect(
-      (await collect(job.select(strict.ctx))).flatMap((b) => b.candidates),
-    ).toEqual([]);
+      candidates(await collect(job.select(ctx))).map((c) => c.assetId),
+    ).toEqual(['IMG_0001.PNG', 'Screenshot_1.png']);
   });
 
-  it('warns that phase-6 signals are not active yet', async () => {
-    const { ctx, logs } = setup({
-      readIosTag: true,
-      clip: { enabled: true, queries: ['x'], topN: 10 },
+  describe('iOS tag from the file', () => {
+    it('reads borderline assets and makes tagged ones decisive', async () => {
+      const { ctx, reads, logs } = setup(
+        { threshold: 0.7 },
+        { pages: [[...page1, fileTagged, untagged, generated]] },
+      );
+      const [batch] = await collect(job.select(ctx));
+      // Read: the three PNGs below the threshold. Not read: description-tagged, camera HEIC.
+      expect(reads.sort()).toEqual([
+        'IMG_0005.PNG',
+        'IMG_0006.PNG',
+        'IMG_0007.PNG',
+      ]);
+      expect(
+        batch.candidates.map((c) => [c.assetId, c.score, c.reasons[0]]),
+      ).toEqual([
+        ['IMG_0001.PNG', 1, 'description-tag'],
+        ['IMG_0005.PNG', 1, 'ios-tag'],
+      ]);
+      expect(batch).toMatchObject({ filesRead: 3, cacheHits: 0 });
+      expect(logs).toContain('iOS tag: 3 files read, 0 from cache');
     });
-    await collect(job.select(ctx));
-    expect(logs.filter((l) => l.startsWith('WARN'))).toHaveLength(2);
+
+    it('skips assets that already pass on metadata', async () => {
+      const { ctx, reads } = setup({}, { pages: [[fileTagged, untagged]] }); // both 0.6 = threshold
+      await collect(job.select(ctx));
+      expect(reads).toEqual([]);
+    });
+
+    it('answers from the cache on the next run', async () => {
+      const features = new MemoryFeatureCache();
+      const pages = [[fileTagged, untagged, generated]];
+      const first = setup({ threshold: 0.7 }, { pages, features });
+      await collect(job.select(first.ctx));
+      const second = setup({ threshold: 0.7 }, { pages, features });
+      const [batch] = await collect(job.select(second.ctx));
+      expect(second.reads).toEqual([]);
+      expect(batch).toMatchObject({ filesRead: 0, cacheHits: 3 });
+      expect(batch.candidates.map((c) => c.assetId)).toEqual(['IMG_0005.PNG']);
+    });
+
+    it('can be switched off', async () => {
+      const { ctx, reads } = setup(
+        { threshold: 0.7, readIosTag: false },
+        { pages: [[fileTagged]] },
+      );
+      expect(candidates(await collect(job.select(ctx)))).toEqual([]);
+      expect(reads).toEqual([]);
+    });
+  });
+
+  describe('CLIP', () => {
+    it('adds a rank bonus from smart search', async () => {
+      const { ctx, logs } = setup(
+        {
+          readIosTag: false,
+          clip: { enabled: true, queries: ['a screenshot'], topN: 100 },
+        },
+        { pages: [[generated]], smart: async () => ['IMG_0007.PNG'] },
+      );
+      const [c] = candidates(await collect(job.select(ctx)));
+      expect(c).toMatchObject({
+        assetId: 'IMG_0007.PNG',
+        score: 0.65,
+        reasons: ['png', 'no-camera-exif', 'clip'],
+      });
+      expect(logs).toContain('CLIP: 1 assets ranked by 1 queries');
+    });
+
+    it('continues without CLIP when Immich ML is unavailable', async () => {
+      const { ctx, logs } = setup(
+        {
+          readIosTag: false,
+          clip: { enabled: true, queries: ['x'], topN: 10 },
+        },
+        {
+          smart: async () => {
+            throw new ImmichSmartSearchUnavailableError('corr-1');
+          },
+        },
+      );
+      expect(candidates(await collect(job.select(ctx)))).toHaveLength(2);
+      expect(
+        logs.some((l) =>
+          l.startsWith('WARN Immich smart search is unavailable'),
+        ),
+      ).toBe(true);
+    });
   });
 
   it('has valid defaults', () => {
     expect(ScreenshotParams.parse({})).toEqual(job.defaultParams);
     expect(job.defaultParams).toMatchObject({
       threshold: 0.6,
-      readIosTag: false,
+      readIosTag: true,
       clip: { enabled: false },
     });
+    expect(job.version).toBe(2);
   });
 });
