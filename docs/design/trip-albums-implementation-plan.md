@@ -75,23 +75,32 @@ Tasks:
 
 **Goal:** a local, refreshable copy of the metadata that grouping needs (SDD §4).
 
-**Status:** not started
+**Status:** done (2026-11-03) – verified against a fake Immich (incl. 100k assets); pending: first refresh against the real library (comes with the first trip dry run in T3)
 
 Tasks:
 
-- [ ] Entity `AssetIndexEntity` + hand-written migration `AssetIndex` (table, index on `taken_at`, on `country`); register in `migrations/index.ts`.
-- [ ] `ImmichClient`: make sure `searchMetadataPage` returns everything the index needs (GPS, place, `ownerId`, `fileCreatedAt`, `localDateTime`, `timeZone`); add an `ownerId` filter if T0 shows it is needed.
-- [ ] `AssetIndexService` (`src/index/`):
-  - [ ] `refresh(scope, { since?, resumeFrom?, signal })` yields pages with cursors; each page is upserted in one `SqliteService.transaction()`.
-  - [ ] Full refresh deletes rows not seen in this refresh.
+- [x] Entity `AssetIndexEntity` + hand-written migration `AssetIndex` (table, index on `taken_at`, on `country`); register in `migrations/index.ts`.
+  - Note: index on `taken_at` only. Readers load the whole index into memory, so an index on `country` would never be used.
+- [x] `ImmichClient`: make sure `searchMetadataPage` returns everything the index needs (GPS, place, `ownerId`, `fileCreatedAt`, `localDateTime`, `timeZone`); add an `ownerId` filter if T0 shows it is needed.
+  - Note: everything was already in the items. Added `types` (several asset types via `in`) and `getMyUserId()` (`GET /users/me`, `user.read`), because there is no owner filter in the v3 DSL.
+- [x] `AssetIndexService` (`src/index/`):
+  - Note: in `src/asset-index/` (`AssetIndexModule`, registered in `AppModule`). The index always holds the **widest scope**: images and videos, timeline and archive, own and partner assets. Jobs narrow it down when reading (`IndexReadFilter`) instead of passing a scope to the refresh. So two jobs with different params can share the table without a refresh of one deleting the other's rows. SDD §3.3 `indexScope()` is dropped.
+  - [x] `refresh(scope, { since?, resumeFrom?, signal })` yields pages with cursors; each page is upserted in one `SqliteService.transaction()`.
+    - Note: `refresh({ startedAt, resumeFrom?, signal })`, no scope and no `since` (full refresh only, see the T0 note below). `startedAt` is stored on every row. A resumed refresh passes the same value (the run's start), so rows written before the interruption survive `completeRefresh`. `refreshAll()` runs a whole refresh in one go.
+  - [x] Full refresh deletes rows not seen in this refresh.
+    - Note: `completeRefresh(startedAt)` deletes rows with `indexed_at < startedAt`. Concurrent refreshes are safe: rows seen by a later-started refresh are newer.
   - Note (T0): a full walk of the real library (32k assets) takes ~8 s. Start with a **full refresh on every run**; add the incremental refresh only if a larger library needs it (API notes §10.6).
-  - [ ] `forget(assetIds)` for ids Immich refused (deleted assets).
-- [ ] `AssetIndexReader`: ordered iteration by `taken_at` (all rows in memory as compact objects), `between(start, end)`.
-- [ ] Mapping helpers: `has_camera` (null/`""` = empty, API notes §4.2), `is_screenshot`.
+  - [x] `forget(assetIds)` for ids Immich refused (deleted assets).
+- [x] `AssetIndexReader`: ordered iteration by `taken_at` (all rows in memory as compact objects), `between(start, end)`.
+  - Note: `AssetIndexService.read(filter)` streams rows into the reader. Ties are ordered by id, so detection stays deterministic. The filter (`matchesFilter`) never returns a partner's archived assets, because Immich refuses to add them to albums (API notes §10.2).
+- [x] Mapping helpers: `has_camera` (null/`""` = empty, API notes §4.2), `is_screenshot`.
+  - Note: `toIndexRow()` also skips other types, hidden/locked/trashed assets and assets without a date. It drops half a coordinate pair, and stores `localDateTime` without Immich's fake `Z`.
 
-- [ ] **Tests:** mapping, upsert idempotency, full-refresh deletion, incremental refresh, resume from cursor (fake Immich server).
+- [x] **Tests:** mapping, upsert idempotency, full-refresh deletion, incremental refresh, resume from cursor (fake Immich server).
+  - Note: 25 tests in `src/asset-index/` (no incremental refresh to test). Also abort between pages, every field round-tripping through SQLite, and the read filter (own / partner / archived / types). `ImmichClient`: `types` filter and `getMyUserId`. One-off measurement against a fake Immich with 100k assets: full refresh ~1.7 s (plus Immich's own time, ~8 s per 32k on the real NAS), `read()` ~0.6 s, heap growth up to ~135 MB (without GC; upper bound).
 
 - [ ] **Done when:** a full refresh of the real library completes and resumes after an interrupt; an incremental refresh only fetches changed assets.
+  - Note: resume ✓ against the fake Immich. The real-library refresh is pending; nothing calls the index yet, so it will run with the first trip dry run in T3. Incremental refresh dropped (T0 note).
 
 ---
 
@@ -136,6 +145,7 @@ Tasks:
 - [ ] `GroupReconciler` (pure): new / update / split / merge / orphan / ignored / locked (SDD §7.2).
 - [ ] `RunExecutor`: dispatch by `kind`; group run = index (resumable) → group → reconcile → dry run stores `run_group` + `run_candidate` (with `group_key`). Totals: indexed, trips found / new / updated / orphaned, assets matched.
 - [ ] `RunLauncher`: full vs. incremental for group jobs (index `since`; regrouping is always full); weekly full refresh (`fullRefreshEveryDays`).
+  - Note (T1): the index is always refreshed in full, so group runs need no incremental mode and no `fullRefreshEveryDays`. Pass the run's start as `startedAt` so resume works.
 - [ ] `TripAlbumsJob` (`@AlbumJobType()`, listed in `JOB_TYPES`) wiring T2 into `group()`.
 - [ ] API: `GET/PATCH /runs/:id/groups`, `GET /runs/:id/candidates?group=`, `GET /jobs/:id/groups`, `PATCH /jobs/:id/groups/:groupId`, `GET /jobs/:id/home`.
 - [ ] Job create/update: target album optional for group job types.
@@ -202,6 +212,7 @@ Tasks:
 Tasks:
 
 - [ ] Scheduled runs for group jobs via `JobScheduler`: nightly incremental, weekly full index refresh.
+  - Note (T1): every scheduled run refreshes the index in full; no separate weekly refresh.
 - [ ] Ongoing trips: created when qualified, grow per run, return transit applied once home (fixtures + contract test with time travel).
 - [ ] Late imports: closed trips pick up newly indexed assets.
 - [ ] Partner assets per T0 result (`fill` / `full` / `off`), or remove the param with a note.

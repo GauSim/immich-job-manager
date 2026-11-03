@@ -120,7 +120,7 @@ A group run has four steps. Only the first talks to Immich's search, and it is r
 ```
 
 - **Index** is generic core code. It is reusable by future group jobs (e.g. "best of a person per year").
-- **Group** is the job type: a pure function over index rows, unit-testable without Immich. 100k rows sorted in memory take milliseconds and about 20 MB.
+- **Group** is the job type: a pure function over index rows, unit-testable without Immich. 100k rows load in under a second and take on the order of 100 MB of heap while grouping.
 - **Reconcile** and **Sync** are generic core code. They know nothing about trips.
 
 ### 3.3 Job type interface
@@ -139,8 +139,8 @@ export interface GroupJobType<P = unknown> {
   readonly version: number;                  // bump → re-group + full re-sync (index is kept)
   readonly params: z.ZodType<P>;
   readonly defaultParams: P;
-  /** Which assets the index must contain for this job (types, visibility, partners). */
-  indexScope(params: P): IndexScope;
+  /** Which index rows the job reads (own / partners / archived / types; T1: the index itself always holds everything). */
+  indexFilter(params: P, ownerId: string): IndexReadFilter;
   /** Pure: reads the index, returns all groups of the library. No Immich writes. */
   group(ctx: GroupContext<P>): Promise<ProposedGroup[]>;
 }
@@ -192,9 +192,10 @@ Table `asset_index`, one row per asset in the scope of any group job:
 | `immich_updated_at` | datetime | |
 | `indexed_at` | datetime | |
 
-- **Full refresh** (full runs, version bump): page through `/search/metadata` for the scope, upsert each page in one `SqliteService.transaction()`, save the cursor. At the end, rows not seen in this refresh (`indexed_at < refresh start`) are deleted, so assets deleted or trashed in Immich go away.
-- **Incremental refresh**: `updatedAt > since`. Deletions are not visible this way. A sync that gets `no_permission` / `not_found` for an id deletes its index row and logs it. A weekly full refresh is the default safety net (§7.3).
-- Size: about 200 bytes per row, so 100k assets ≈ 20 MB.
+- **Scope:** always the widest one (images and videos, timeline and archive, own and partner assets). Jobs narrow it down when reading (own only, archived or not, partners' timeline assets only). So one table serves every group job (T1).
+- **Full refresh, every run:** page through `/search/metadata`, upsert each page in one `SqliteService.transaction()` with `indexed_at` = the run's start, save the cursor. At the end, rows not seen in this refresh (`indexed_at < refresh start`) are deleted, so assets deleted or trashed in Immich go away. A resumed refresh reuses the run's start, so it keeps the rows written before the interruption.
+- **No incremental refresh:** the full walk of the real library (32k assets) takes ~8 s (API notes §10.6). Should a larger library need it: `updatedAt > since`, plus deleting rows when a sync gets `no_permission` / `not_found`.
+- Size: 100k assets ≈ 1.7 s to refresh against a fake Immich and up to ~135 MB of heap when read (one-off measurement, T1).
 - The index is a cache. Deleting it only costs one full refresh.
 
 ---
@@ -386,7 +387,7 @@ For each trip touched by the run, in this order:
 
 Idempotent: a rerun without library changes makes zero write calls. Sync modes keep their meaning (`dry-run`, `additive`, `mirror`), applied per trip. Album description: `Trip detected by Immich Album Jobs (2026-03-03 → 2026-03-21)`.
 
-Runs: the default schedule is nightly incremental (index since last run, re-group all, sync changed trips only), plus a full index refresh weekly (`fullRefreshEveryDays`, default 7). Re-grouping always uses the whole index, so incremental runs see splits and merges too.
+Runs: the default schedule is nightly. Every run refreshes the whole index (T1: ~8 s for 32k assets), re-groups the whole index and syncs only the trips that changed, so it sees splits and merges too.
 
 ### 7.4 Adopting existing albums
 
@@ -455,9 +456,8 @@ All new interactive elements get `data-testid`s for Playwright.
 
 | Step | 30k assets | 100k assets |
 | --- | --- | --- |
-| Full index refresh | ~30 search calls | ~100 search calls |
-| Incremental refresh | changed assets only | changed assets only |
-| Grouping | in memory, < 1 s | in memory, ~1–2 s, ~20 MB |
+| Full index refresh (every run) | ~30 search calls, ~8 s | ~100 search calls |
+| Grouping | in memory, < 1 s | in memory, ~1–2 s, ~100 MB |
 | Sync, unchanged trips | 0 writes; 1 member read per touched trip | same |
 | First real run, e.g. 80 trips | ~80 album creates + adds | same |
 

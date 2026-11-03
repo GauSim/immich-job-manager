@@ -39,6 +39,7 @@ describe('migrations', () => {
       'run_candidate',
       'job_asset',
       'asset_feature',
+      'asset_index',
       'run_log',
       'setting',
       'migrations',
@@ -52,6 +53,7 @@ describe('migrations', () => {
       'idx_run_candidate_asset',
       'idx_run_log_run',
       'idx_run_log_ts',
+      'idx_asset_index_taken_at',
     ]) {
       expect(names).toContain(index);
     }

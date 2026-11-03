@@ -199,6 +199,16 @@ describe('ImmichClient', () => {
       });
     });
 
+    it('filters several asset types with `in`', async () => {
+      server.on('POST /search/metadata', () => ({ json: searchResponse([]) }));
+      await client.searchMetadataPage({
+        types: [AssetTypeEnum.Image, AssetTypeEnum.Video],
+      });
+      expect((server.requests[0].body as { filter: unknown }).filter).toEqual({
+        type: { in: ['IMAGE', 'VIDEO'] },
+      });
+    });
+
     it('lists album members across pages', async () => {
       server.on('POST /search/metadata', (req) => {
         const body = req.body as { cursor?: string; filter: unknown };
@@ -215,6 +225,15 @@ describe('ImmichClient', () => {
         'b',
         'c',
       ]);
+    });
+  });
+
+  describe('getMyUserId', () => {
+    it('returns the id from GET /users/me', async () => {
+      server.on('GET /users/me', () => ({
+        json: { id: 'user-1', email: 'a@example.com', name: 'A' },
+      }));
+      await expect(client.getMyUserId()).resolves.toBe('user-1');
     });
   });
 

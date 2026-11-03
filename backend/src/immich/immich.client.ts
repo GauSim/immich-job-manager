@@ -6,6 +6,7 @@ import {
   AssetVisibility,
   createAlbum,
   getAllAlbums,
+  getMyUser,
   getServerVersion,
   isHttpError,
   removeAssetFromAlbum,
@@ -77,6 +78,8 @@ export interface ServerVersion {
 export interface MetadataPageQuery {
   /** Asset type, e.g. `IMAGE`. Omit for all types. */
   type?: AssetTypeEnum;
+  /** Several asset types (e.g. images and videos); ignored when `type` is set. */
+  types?: AssetTypeEnum[];
   /**
    * Visibilities to include. Omit to use Immich's default (timeline + archive).
    * Jobs should always set this explicitly.
@@ -186,6 +189,16 @@ export class ImmichClient {
       patch: v.patch,
       version: `v${v.major}.${v.minor}.${v.patch}`,
     };
+  }
+
+  /**
+   * Id of the API key's user (`GET /users/me`, needs `user.read`). Metadata
+   * search also returns assets of timeline-sharing partners, told apart by
+   * `ownerId` (API notes §10.1).
+   */
+  async getMyUserId(options: CallOptions = {}): Promise<string> {
+    const me = await this.call('getMyUser', (o) => getMyUser(o), options);
+    return me.id;
   }
 
   /** Throws {@link ImmichIncompatibleError} unless the server is Immich v3.x. */
@@ -622,6 +635,7 @@ export function buildMetadataSearch(
 ): MetadataSearchDto {
   const filter: SearchFilter = {};
   if (query.type) filter.type = { eq: query.type };
+  else if (query.types?.length) filter.type = { in: query.types };
   if (query.visibility) filter.visibility = { in: query.visibility };
   if (query.updatedAfter)
     filter.updatedAt = { gt: query.updatedAfter.toISOString() };
